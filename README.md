@@ -46,16 +46,6 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 
 这些功能本身并不复杂，FocuSD 真正想做的是**缩短获取高频信息的路径**：需要的时候看一眼屏幕顶部，用完之后继续专注于当前的事情
 
-## 实际效果
-
-下面是 FocuSD 的功能演示：
-
-<a href="https://raw.githubusercontent.com/flyl1u/FocuSD/main/docs/demo.mp4">
-  <img src="https://raw.githubusercontent.com/flyl1u/FocuSD/ac9ba9e0d61a8f779a66bb0b5a52ccef3e515ef7/docs/demo-preview.gif" alt="FocuSD Demo 预览">
-</a>
-
-点击上方预览图可以打开完整视频，也可以直接[下载 Demo 视频](https://raw.githubusercontent.com/flyl1u/FocuSD/main/docs/demo.mp4)。
-
 ## 如何使用
 
 项目使用以下技术构建：
