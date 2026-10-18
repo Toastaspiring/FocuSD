@@ -33,7 +33,7 @@ const WINDOW_LABEL: &str = "main";
 const STAGE_WINDOW_WIDTH: f64 = 820.0;
 const STAGE_WINDOW_HEIGHT: f64 = 460.0;
 const DEFAULT_MARGIN_Y: f64 = 0.0;
-const DEFAULT_COLLAPSED_SCALE: f64 = 0.82;
+const DEFAULT_COLLAPSED_SCALE: f64 = 0.89;
 const DEFAULT_EXPANDED_SCALE: f64 = 0.91;
 const MIN_COLLAPSED_ISLAND_WIDTH: f64 = 280.0;
 const COLLAPSED_ISLAND_WIDTH: f64 = 340.0;
@@ -45,7 +45,6 @@ const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 240.0;
 const EXPANDED_RADIUS: f64 = 30.0;
 const STAGE_WINDOW_PADDING_Y: f64 = 24.0;
 const TUCKED_VISIBLE_EDGE_HEIGHT: f64 = 10.0;
-const DOCK_SHOULDER_RADIUS: f64 = 6.0;
 const POSITION_ANIMATION_DURATION: Duration = Duration::from_millis(320);
 const STARTUP_REGISTRY_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 const STARTUP_REGISTRY_VALUE: &str = "FocuSD Island";
@@ -1411,11 +1410,6 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
     let island_top = 0.0;
     let radius = state.mode.corner_radius() * state.active_scale() * physical_scale;
     let top_radius = state.top_corner_radius() * state.active_scale() * physical_scale;
-    let shoulder_radius = if state.is_detached() {
-        0.0
-    } else {
-        DOCK_SHOULDER_RADIUS * state.active_scale() * physical_scale
-    };
 
     point_in_notch(
         local_x,
@@ -1426,7 +1420,6 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
         island_height,
         radius,
         top_radius,
-        shoulder_radius,
     )
 }
 
@@ -1439,30 +1432,12 @@ fn point_in_notch(
     height: f64,
     radius: f64,
     top_radius: f64,
-    shoulder_radius: f64,
 ) -> bool {
     let right = left + width;
     let bottom = top + height;
 
-    if y < top || y > bottom {
+    if x < left || x > right || y < top || y > bottom {
         return false;
-    }
-
-    if x < left || x > right {
-        // Dock shoulders fill the outside of a quarter circle.
-        if shoulder_radius <= 0.0 || y > top + shoulder_radius {
-            return false;
-        }
-        let center_x = if x < left && x >= left - shoulder_radius {
-            left - shoulder_radius
-        } else if x > right && x <= right + shoulder_radius {
-            right + shoulder_radius
-        } else {
-            return false;
-        };
-        let dx = x - center_x;
-        let dy = y - (top + shoulder_radius);
-        return dx * dx + dy * dy >= shoulder_radius * shoulder_radius;
     }
 
     let top_radius = top_radius.min(width / 2.0).min(height / 2.0);
@@ -1527,7 +1502,7 @@ mod tests {
                 let width = width * scale;
                 let height = height * scale;
                 let radius = mode.corner_radius() * scale;
-                let contains = |x, y| point_in_notch(x, y, 80.0, 0.0, width, height, radius, 0.0, 0.0);
+                let contains = |x, y| point_in_notch(x, y, 80.0, 0.0, width, height, radius, 0.0);
 
                 assert!(contains(80.0, 0.0));
                 assert!(contains(80.0 + width, 0.0));
@@ -1550,7 +1525,7 @@ mod tests {
     }
 
     #[test]
-    fn detached_island_rounds_top_and_removes_dock_shoulders() {
+    fn detached_island_rounds_top_corners() {
         for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
             let mut detached = state(mode, 1.0, DEFAULT_EXPANDED_ISLAND_HEIGHT);
             assert_eq!(detached.top_corner_radius(), 0.0);
@@ -1558,7 +1533,7 @@ mod tests {
             assert!(detached.top_corner_radius() > 0.0);
             let (width, height) = mode.base_size(COLLAPSED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
             let contains = |x, y| point_in_notch(
-                x, y, 80.0, 0.0, width, height, mode.corner_radius(), detached.top_corner_radius(), 0.0,
+                x, y, 80.0, 0.0, width, height, mode.corner_radius(), detached.top_corner_radius(),
             );
             assert!(!contains(80.0, 0.0));
             assert!(!contains(80.0 + width, 0.0));
@@ -1572,19 +1547,19 @@ mod tests {
     }
 
     #[test]
-    fn dock_shoulders_follow_the_inverse_arc_at_each_scale() {
-        for scale in [0.75, 0.82, 1.0, 1.4, 2.1] {
-            let radius = DOCK_SHOULDER_RADIUS * scale;
+    fn docked_island_does_not_capture_cursor_outside_its_sides() {
+        for scale in [0.75, DEFAULT_COLLAPSED_SCALE, 1.0, 1.4, 2.1] {
             let width = COLLAPSED_ISLAND_WIDTH * scale;
             let contains = |x, y| point_in_notch(
                 x, y, 80.0, 0.0, width, COLLAPSED_ISLAND_HEIGHT * scale,
-                COLLAPSED_RADIUS * scale, 0.0, radius,
+                COLLAPSED_RADIUS * scale, 0.0,
             );
-            assert!(contains(80.0 - radius / 2.0, 0.0));
-            assert!(contains(80.0 + width + radius / 2.0, 0.0));
-            assert!(!contains(80.0 - radius / 2.0, radius));
-            assert!(!contains(80.0 + width + radius / 2.0, radius));
-            assert!(!contains(80.0 - radius - 1.0, 0.0));
+            assert!(contains(80.0, 0.0));
+            assert!(contains(80.0 + width, 0.0));
+            for y in [0.0, 3.0 * scale, 6.0 * scale] {
+                assert!(!contains(79.0, y));
+                assert!(!contains(81.0 + width, y));
+            }
         }
     }
 

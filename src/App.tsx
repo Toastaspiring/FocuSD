@@ -270,7 +270,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   fontFamily: "system",
   glassIntensity: 72,
   opacity: 95,
-  collapsedScale: 0.82,
+  collapsedScale: 0.89,
   expandedScale: 0.91,
   marginY: 0,
   taskTextColor: DEFAULT_TASK_TEXT_COLOR,
@@ -535,7 +535,7 @@ function normalizeSettings(
   const hasPreviousDefaultScales =
     settings?.collapsedScale === 0.81 && settings.expandedScale === 0.88;
   const collapsedScale = hasPreviousDefaultScales
-    ? DEFAULT_SETTINGS.collapsedScale
+    ? 0.82
     : settings?.collapsedScale ?? settings?.sizeScale ?? DEFAULT_SETTINGS.collapsedScale;
   const expandedScale = hasPreviousDefaultScales
     ? DEFAULT_SETTINGS.expandedScale

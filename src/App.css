@@ -2,7 +2,7 @@
   font-family: "Fusion Pixel";
   src: url("./assets/fonts/fusion-pixel-12px-proportional-zh_hans.otf.woff2") format("woff2");
   font-style: normal;
-  font-weight: 400 900;
+  font-weight: 400;
   font-display: swap;
 }
 
@@ -55,7 +55,7 @@ input,
 
 .stage--font-pixel {
   font-family: "Fusion Pixel", "Microsoft YaHei", sans-serif;
-  font-synthesis: none;
+  font-synthesis: weight;
   -webkit-font-smoothing: none;
 }
 
@@ -70,8 +70,8 @@ input,
 .stage--font-pixel .island__brand,
 .stage--font-pixel .island__active-task,
 .stage--font-pixel .island__todo-count {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .stage {
@@ -137,33 +137,6 @@ input,
   inset: 0;
   overflow: hidden;
   border-radius: inherit;
-}
-
-.island::before,
-.island::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: 6px;
-  height: 6px;
-  background: inherit;
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
-.island::before {
-  left: -6px;
-  mask-image: radial-gradient(circle at 0 100%, transparent 5.5px, #000 6px);
-}
-
-.island::after {
-  right: -6px;
-  mask-image: radial-gradient(circle at 100% 100%, transparent 5.5px, #000 6px);
-}
-
-.island--docked::before,
-.island--docked::after {
-  opacity: 1;
 }
 
 .island--music {
@@ -3525,8 +3498,6 @@ input,
 
 @media (prefers-reduced-motion: reduce) {
   .island,
-  .island::before,
-  .island::after,
   .island__collapsed,
   .island__expanded,
   .island--expanded .island__expanded,
