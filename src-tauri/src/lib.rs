@@ -29,12 +29,13 @@ use windows::Win32::{
 const WINDOW_LABEL: &str = "main";
 const STAGE_WINDOW_WIDTH: f64 = 820.0;
 const STAGE_WINDOW_HEIGHT: f64 = 460.0;
-const DEFAULT_MARGIN_Y: f64 = 12.0;
+const DEFAULT_MARGIN_Y: f64 = 0.0;
 const DEFAULT_COLLAPSED_SCALE: f64 = 0.82;
 const DEFAULT_EXPANDED_SCALE: f64 = 0.91;
-const MIN_COLLAPSED_ISLAND_WIDTH: f64 = 240.0;
-const COLLAPSED_ISLAND_WIDTH: f64 = 320.0;
-const COLLAPSED_ISLAND_HEIGHT: f64 = 54.0;
+const MIN_COLLAPSED_ISLAND_WIDTH: f64 = 280.0;
+const COLLAPSED_ISLAND_WIDTH: f64 = 340.0;
+const COLLAPSED_ISLAND_HEIGHT: f64 = 38.0;
+const COLLAPSED_RADIUS: f64 = 22.0;
 const EXPANDED_ISLAND_WIDTH: f64 = 560.0;
 const DEFAULT_EXPANDED_ISLAND_HEIGHT: f64 = 306.0;
 const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 240.0;
@@ -84,7 +85,7 @@ impl IslandMode {
 
     fn corner_radius(self) -> f64 {
         match self {
-            Self::Collapsed => COLLAPSED_ISLAND_HEIGHT / 2.0,
+            Self::Collapsed => COLLAPSED_RADIUS,
             Self::Expanded => EXPANDED_RADIUS,
         }
     }
@@ -1192,11 +1193,9 @@ fn apply_glass_material(
 }
 
 fn apply_stage_geometry(window: &WebviewWindow, state: IslandWindowState) -> Result<(), String> {
-    let (_, base_height) = state
-        .mode
-        .base_size(state.collapsed_width, state.expanded_height);
+    // Keep room for the closing animation at every supported panel scale.
     let stage_height = STAGE_WINDOW_HEIGHT
-        .max((base_height * state.active_scale()).ceil() + STAGE_WINDOW_PADDING_Y);
+        .max((state.expanded_height * state.expanded_scale).ceil() + STAGE_WINDOW_PADDING_Y);
 
     window
         .set_size(Size::Logical(LogicalSize::new(
@@ -1223,16 +1222,14 @@ fn apply_stage_geometry(window: &WebviewWindow, state: IslandWindowState) -> Res
     let monitor_position = monitor.position();
     let monitor_size = monitor.size();
     let physical_width = (STAGE_WINDOW_WIDTH * scale).round() as i32;
-    let physical_top_offset = if matches!(state.mode, IslandMode::Collapsed) && state.is_tucked {
+    let physical_top_offset = (state.margin_y * scale).round() as i32;
+    let tucked_top_offset =
         -((COLLAPSED_ISLAND_HEIGHT * state.collapsed_scale - TUCKED_VISIBLE_EDGE_HEIGHT).max(0.0)
             * scale)
-            .round() as i32
-    } else {
-        (state.margin_y * scale).round() as i32
-    };
+            .round() as i32;
     let centered_x = monitor_position.x + ((monitor_size.width as i32 - physical_width) / 2);
     let normal_y = monitor_position.y + physical_top_offset;
-    let tucked_y = monitor_position.y + physical_top_offset;
+    let tucked_y = monitor_position.y + tucked_top_offset;
     let mut positioned_state = state;
     if !has_custom_monitor {
         positioned_state.custom_position = None;
@@ -1341,7 +1338,7 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
     let island_top = 0.0;
     let radius = state.mode.corner_radius() * state.active_scale() * physical_scale;
 
-    point_in_rounded_rect(
+    point_in_notch(
         local_x,
         local_y,
         island_left,
@@ -1352,7 +1349,7 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
     )
 }
 
-fn point_in_rounded_rect(
+fn point_in_notch(
     x: f64,
     y: f64,
     left: f64,
@@ -1368,7 +1365,10 @@ fn point_in_rounded_rect(
         return false;
     }
 
-    let radius = radius.min(width / 2.0).min(height / 2.0);
+    let radius = radius.min(width / 2.0).min(height);
+    if y <= bottom - radius || (x >= left + radius && x <= right - radius) {
+        return true;
+    }
     let center_x = if x < left + radius {
         left + radius
     } else if x > right - radius {
@@ -1376,13 +1376,7 @@ fn point_in_rounded_rect(
     } else {
         x
     };
-    let center_y = if y < top + radius {
-        top + radius
-    } else if y > bottom - radius {
-        bottom - radius
-    } else {
-        y
-    };
+    let center_y = y.min(bottom - radius);
     let dx = x - center_x;
     let dy = y - center_y;
 
@@ -1415,6 +1409,37 @@ mod tests {
 
         custom.is_tucked = false;
         assert_eq!(resolve_stage_position(custom, 100, 12, -48), (420, 180));
+    }
+
+    #[test]
+    fn notch_has_flat_top_and_rounded_bottom_at_all_scales() {
+        for scale in [0.75, DEFAULT_COLLAPSED_SCALE, 1.0, 1.4, 2.1] {
+            for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
+                let (width, height) =
+                    mode.base_size(COLLAPSED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+                let width = width * scale;
+                let height = height * scale;
+                let radius = mode.corner_radius() * scale;
+                let contains = |x, y| point_in_notch(x, y, 80.0, 0.0, width, height, radius);
+
+                assert!(contains(80.0, 0.0));
+                assert!(contains(80.0 + width, 0.0));
+                assert!(contains(80.0 + width / 2.0, height));
+                assert!(!contains(80.0, height));
+                assert!(!contains(80.0 + width, height));
+                assert!(!contains(79.0, 0.0));
+                assert!(!contains(80.0 + width / 2.0, height + 1.0));
+            }
+        }
+    }
+
+    #[test]
+    fn default_notch_stays_at_top_when_expanding() {
+        for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
+            let state = state(mode, 1.0, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+            assert_eq!(state.margin_y, 0.0);
+            assert_eq!(resolve_stage_position(state, 550, 0, -28), (550, 0));
+        }
     }
 
     #[test]

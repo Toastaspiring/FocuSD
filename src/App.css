@@ -46,7 +46,7 @@ input {
 .stage {
   --island-opacity: 0.92;
   --island-scale: 1;
-  --collapsed-island-width: 320px;
+  --collapsed-island-width: 340px;
   --task-text-color: #1afbff;
   --island-pulse-color: #49e18f;
   --island-pulse-glow-color: rgba(73, 225, 143, 0.72);
@@ -56,6 +56,7 @@ input {
   --glass-intensity: 0.72;
   --glass-mask-opacity: 0.53;
   --glass-tint-color: rgba(16, 16, 19, 0.53);
+  --glass-collapsed-tint-color: rgba(16, 16, 19, 0.8);
   width: 100vw;
   height: 100vh;
   display: flex;
@@ -92,9 +93,10 @@ input {
   transform-origin: top center;
   will-change: width, height, border-radius, transform;
   transition:
-    width 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    height 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-radius 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
     background 260ms ease,
     box-shadow 300ms ease;
 }
@@ -119,6 +121,7 @@ input {
   isolation: isolate;
   opacity: 1;
   background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.36), transparent 96px),
     linear-gradient(
       145deg,
       rgba(255, 255, 255, var(--glass-soft-alpha)),
@@ -224,26 +227,44 @@ input {
 
 .island--collapsed {
   width: var(--collapsed-island-width);
-  height: 54px;
-  border-radius: 999px;
-  cursor: default;
+  height: 38px;
+  border-radius: 0 0 22px 22px;
+  cursor: pointer;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.22)),
     var(--island-background-color);
   box-shadow: none;
 }
 
+.island--collapsed:hover,
+.island--collapsed:focus-within {
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.26),
+    inset 0 0 18px rgba(255, 255, 255, 0.08),
+    0 5px 16px rgba(0, 0, 0, 0.12);
+}
+
 .island--appearance-liquidGlass.island--collapsed {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.11), transparent 42%),
     linear-gradient(180deg, transparent 48%, rgba(6, 16, 24, 0.1)),
-    var(--glass-tint-color);
+    var(--glass-collapsed-tint-color);
   box-shadow:
     0 12px 34px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.36),
     inset 0 -1px 0 rgba(8, 22, 32, 0.18),
     inset 1px 0 0 rgba(116, 214, 255, 0.14),
     inset -1px 0 0 rgba(255, 156, 224, 0.08);
+}
+
+.island--appearance-liquidGlass.island--collapsed:hover,
+.island--appearance-liquidGlass.island--collapsed:focus-within {
+  box-shadow:
+    0 8px 26px rgba(0, 0, 0, 0.2),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 0 18px rgba(255, 255, 255, 0.1),
+    inset 1px 0 0 rgba(116, 214, 255, 0.24),
+    inset -1px 0 0 rgba(255, 156, 224, 0.16);
 }
 
 .island--appearance-liquidGlass.island--expanded .island__glass::after {
@@ -289,7 +310,7 @@ input {
 .island--expanded {
   width: 560px;
   height: var(--expanded-island-height, 306px);
-  border-radius: 30px;
+  border-radius: 0 0 30px 30px;
   cursor: default;
 }
 
@@ -299,16 +320,16 @@ input {
   inset: 0;
   z-index: 2;
   transition:
-    opacity 180ms ease,
-    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 300ms ease;
+    opacity 120ms ease,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 180ms ease;
 }
 
 .island__collapsed {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 20px;
+  gap: 8px;
+  padding: 0 18px;
   opacity: 1;
   transform: scale(1);
 }
@@ -317,12 +338,34 @@ input {
   pointer-events: none;
   opacity: 0;
   filter: blur(4px);
-  transform: scale(0.9, 0.72);
+  transform: translateY(-6px);
+}
+
+.island__open-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  touch-action: none;
+}
+
+.island__open-button:focus-visible {
+  outline: 2px solid rgba(143, 216, 255, 0.72);
+  outline-offset: -3px;
+  border-radius: 0 0 12px 12px;
 }
 
 .island__pulse {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: var(--island-pulse-color);
@@ -378,14 +421,15 @@ input {
 }
 
 .island--title-hidden .island__collapsed {
-  gap: 10px;
+  gap: 8px;
 }
 
 .island__brand {
   min-width: 0;
-  font-size: 17px;
+  flex: 0 0 auto;
+  font-size: 15px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .island__todo-count {
@@ -393,9 +437,9 @@ input {
   flex: 1;
   overflow: hidden;
   color: var(--task-text-color);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -405,17 +449,17 @@ input {
   flex: 1;
   overflow: hidden;
   color: var(--task-text-color);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .island__quiet-button {
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
@@ -453,13 +497,13 @@ input {
 }
 
 .music-wave-button {
-  width: 36px;
+  width: 28px;
   height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  flex: 0 0 36px;
+  flex: 0 0 28px;
   padding: 0;
   color: #aef5d0;
   background: transparent;
@@ -539,7 +583,7 @@ input {
   pointer-events: none;
   opacity: 0;
   filter: blur(6px);
-  transform: scale(0.78, 0.42);
+  transform: translateY(-6px);
   transform-origin: top center;
 }
 
@@ -548,7 +592,10 @@ input {
   opacity: 1;
   filter: none;
   transform: none;
-  transition-delay: 0ms;
+  transition:
+    opacity 260ms ease 160ms,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 140ms,
+    filter 260ms ease 140ms;
 }
 
 .island__header {
@@ -560,7 +607,7 @@ input {
 }
 
 .island--collapsed:active {
-  cursor: default;
+  cursor: pointer;
 }
 
 .island__title {
@@ -601,8 +648,16 @@ input {
   min-width: 0;
   height: 68px;
   margin: -18px 0 -16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
   cursor: pointer;
   outline: none;
+}
+
+.island__collapse-target:focus-visible {
+  outline: 2px solid rgba(143, 216, 255, 0.72);
+  outline-offset: -5px;
 }
 
 .dot-button {
@@ -3399,6 +3454,7 @@ input {
   .island,
   .island__collapsed,
   .island__expanded,
+  .island--expanded .island__expanded,
   .dot-button,
   .icon-button,
   .island__quiet-button,

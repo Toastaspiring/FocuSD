@@ -152,6 +152,7 @@ type IslandPosition = {
 };
 
 type IslandSettings = {
+  topEdgeLayoutVersion: 1;
   appearanceMode: AppearanceMode;
   glassIntensity: number;
   opacity: number;
@@ -211,8 +212,8 @@ const TODO_SAVE_DIRECTORY_STORAGE_KEY = "focusd-island-save-directory";
 const TODO_LAST_SAVED_SIGNATURE_STORAGE_KEY =
   "focusd-island-last-saved-signature";
 const ISLAND_POSITION_STORAGE_KEY = "focusd-island-position";
-const MIN_COLLAPSED_ISLAND_WIDTH = 240;
-const MAX_COLLAPSED_ISLAND_WIDTH = 320;
+const MIN_COLLAPSED_ISLAND_WIDTH = 280;
+const MAX_COLLAPSED_ISLAND_WIDTH = 340;
 const MIN_COLLAPSED_TEXT_UNITS = 2;
 const MAX_COLLAPSED_TEXT_UNITS = 12;
 const BASE_EXPANDED_ISLAND_HEIGHT = 306;
@@ -261,12 +262,13 @@ const DEFAULT_CLIPBOARD_HISTORY: ClipboardHistorySnapshot = {
   items: [],
 };
 const DEFAULT_SETTINGS: IslandSettings = {
+  topEdgeLayoutVersion: 1,
   appearanceMode: "liquidGlass",
   glassIntensity: 72,
   opacity: 95,
   collapsedScale: 0.82,
   expandedScale: 0.91,
-  marginY: 31,
+  marginY: 0,
   taskTextColor: DEFAULT_TASK_TEXT_COLOR,
   pulseColor: "#49e18f",
   pulseBrightness: 100,
@@ -534,8 +536,12 @@ function normalizeSettings(
   const expandedScale = hasPreviousDefaultScales
     ? DEFAULT_SETTINGS.expandedScale
     : settings?.expandedScale ?? settings?.sizeScale ?? DEFAULT_SETTINGS.expandedScale;
+  const marginY = settings?.marginY ?? settings?.margin ?? DEFAULT_SETTINGS.marginY;
+  const hasPreviousDefaultMargin =
+    settings?.topEdgeLayoutVersion !== 1 && (marginY === 31 || marginY === 12);
 
   return {
+    topEdgeLayoutVersion: 1,
     appearanceMode:
       settings?.appearanceMode === "classic" ||
       settings?.appearanceMode === "liquidGlass"
@@ -558,7 +564,7 @@ function normalizeSettings(
       1.4,
     ),
     marginY: clamp(
-      Number(settings?.marginY ?? settings?.margin ?? DEFAULT_SETTINGS.marginY),
+      Number(hasPreviousDefaultMargin ? DEFAULT_SETTINGS.marginY : marginY),
       0,
       160,
     ),
@@ -912,6 +918,7 @@ function IslandShell({
   children,
 }: IslandShellProps) {
   const glassFrameRef = useRef<number | null>(null);
+  const didDragRef = useRef(false);
   const windowDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -994,6 +1001,7 @@ function IslandShell({
 
   const prepareWindowDrag = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
+      didDragRef.current = false;
       if (event.button !== 0 || isTucked) {
         return;
       }
@@ -1002,7 +1010,7 @@ function IslandShell({
       if (
         target instanceof Element &&
         target.closest(
-          "button, input, textarea, select, a, [contenteditable='true'], [data-window-drag='false']",
+          "button:not(.island__open-button), input, textarea, select, a, [contenteditable='true'], [data-window-drag='false']",
         )
       ) {
         return;
@@ -1032,6 +1040,7 @@ function IslandShell({
       }
 
       windowDragRef.current = null;
+      didDragRef.current = true;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
@@ -1044,18 +1053,6 @@ function IslandShell({
   const cancelWindowDrag = useCallback(() => {
     windowDragRef.current = null;
   }, []);
-
-  const finishCollapsedPointer = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      const drag = windowDragRef.current;
-      windowDragRef.current = null;
-
-      if (drag?.pointerId === event.pointerId) {
-        onOpenPage(page);
-      }
-    },
-    [onOpenPage, page],
-  );
 
   return (
     <section
@@ -1078,24 +1075,43 @@ function IslandShell({
       <div
         className="island__collapsed"
         aria-hidden={isExpanded}
-        onPointerDown={prepareWindowDrag}
-        onPointerMove={handleWindowDragMove}
-        onPointerUp={finishCollapsedPointer}
-        onPointerCancel={cancelWindowDrag}
+        inert={isExpanded}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onOpenPage(page);
+          }
+        }}
       >
-        <span className={pulseClassName} title={agentStatusLabel} />
-        {showTitle && <span className="island__brand">FocuSD</span>}
-        {activeTaskTitle ? (
-          <span className="island__active-task">
-            {showTitle ? "· " : ""}
-            {activeTaskTitle}
-          </span>
-        ) : (
-          <span className="island__todo-count">
-            {showTitle ? "· " : ""}
-            剩余{pendingTodoCount}个待办
-          </span>
-        )}
+        <button
+          className="island__open-button"
+          type="button"
+          aria-label={`${collapsedLabel}，点击展开`}
+          aria-expanded={isExpanded}
+          aria-controls="island-panel"
+          onPointerDown={prepareWindowDrag}
+          onPointerMove={handleWindowDragMove}
+          onPointerUp={cancelWindowDrag}
+          onPointerCancel={cancelWindowDrag}
+          onClick={(event) => {
+            if (event.detail === 0 || !didDragRef.current) {
+              onOpenPage(page);
+            }
+          }}
+        >
+          <span className={pulseClassName} title={agentStatusLabel} />
+          {showTitle && <span className="island__brand">FocuSD</span>}
+          {activeTaskTitle ? (
+            <span className="island__active-task">
+              {showTitle ? "· " : ""}
+              {activeTaskTitle}
+            </span>
+          ) : (
+            <span className="island__todo-count">
+              {showTitle ? "· " : ""}
+              剩余{pendingTodoCount}个待办
+            </span>
+          )}
+        </button>
         <MusicWaveButton
           isAvailable={mediaState.available || mediaState.audioActive}
           isPlaying={isMusicPlaying}
@@ -1115,7 +1131,12 @@ function IslandShell({
         />
       </div>
 
-      <div className="island__expanded" aria-hidden={!isExpanded}>
+      <div
+        id="island-panel"
+        className="island__expanded"
+        aria-hidden={!isExpanded}
+        inert={!isExpanded}
+      >
         <header className="island__header">
           <div className="island__title">
             <CircleDot
@@ -1181,8 +1202,10 @@ function IslandShell({
             />
           </div>
 
-          <div
+          <button
             className="island__collapse-target"
+            type="button"
+            aria-label="折叠岛屿"
             data-window-drag="false"
             onClick={onCollapse}
           />
@@ -1696,7 +1719,7 @@ function LayoutEditor({
           onChange={(expandedScale) => onSettingsChange({ ...settings, expandedScale })}
         />
         <SliderControl
-          label="上下边距"
+          label="顶部距离"
           value={settings.marginY}
           min={0}
           max={160}
@@ -3504,6 +3527,10 @@ function App() {
           settings.islandBackgroundColor,
           glassMaskOpacity,
         ),
+        "--glass-collapsed-tint-color": hexToRgba(
+          settings.islandBackgroundColor,
+          (settings.opacity / 100) * (0.68 + glassStrength * 0.18),
+        ),
         "--todo-background-color": settings.todoBackgroundColor,
       }) as CSSProperties;
     },
@@ -3777,13 +3804,16 @@ function App() {
 
   const resetIslandPosition = useCallback(async () => {
     try {
+      const nextSettings = { ...settings, marginY: DEFAULT_SETTINGS.marginY };
+      await syncNativeLayout(nextSettings);
       await invoke("reset_island_position");
       islandPositionRef.current = null;
       window.localStorage.removeItem(ISLAND_POSITION_STORAGE_KEY);
+      setSettings(nextSettings);
     } catch (error) {
       console.error("Failed to reset island position", error);
     }
-  }, []);
+  }, [settings, syncNativeLayout]);
 
   const setIslandMode = useCallback((nextMode: IslandMode) => {
     setMode(nextMode);
