@@ -466,8 +466,15 @@ input,
   color: #ffd166;
 }
 
-.island--title-hidden .island__collapsed {
-  gap: 8px;
+.island--title-hidden .island__open-button {
+  padding-left: 12px;
+}
+
+.island--title-hidden .island__todo-count,
+.island--title-hidden .island__active-task {
+  /* Balance the status dot against the controls on the right. */
+  padding-left: 28px;
+  text-align: center;
 }
 
 .island__brand {
