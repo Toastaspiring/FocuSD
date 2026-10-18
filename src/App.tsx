@@ -3529,8 +3529,7 @@ function App() {
   const stageStyle = useMemo(
     () => {
       const glassStrength = settings.glassIntensity / 100;
-      const glassMaskOpacity =
-        (settings.opacity / 100) * (0.16 + glassStrength * 0.18);
+      const glassMaskOpacity = settings.opacity / 100;
 
       return ({
         "--island-opacity": settings.opacity / 100,
@@ -3563,7 +3562,7 @@ function App() {
         ),
         "--glass-collapsed-tint-color": hexToRgba(
           settings.islandBackgroundColor,
-          (settings.opacity / 100) * (0.68 + glassStrength * 0.18),
+          glassMaskOpacity,
         ),
         "--todo-background-color": settings.todoBackgroundColor,
       }) as CSSProperties;
