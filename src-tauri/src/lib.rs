@@ -9,9 +9,12 @@ use std::{
     os::windows::process::CommandExt,
     path::{Path, PathBuf},
     process::Command,
-    sync::{Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, OnceLock,
+    },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{
     menu::{Menu, MenuItem},
@@ -42,6 +45,8 @@ const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 240.0;
 const EXPANDED_RADIUS: f64 = 30.0;
 const STAGE_WINDOW_PADDING_Y: f64 = 24.0;
 const TUCKED_VISIBLE_EDGE_HEIGHT: f64 = 10.0;
+const DOCK_SHOULDER_RADIUS: f64 = 6.0;
+const POSITION_ANIMATION_DURATION: Duration = Duration::from_millis(320);
 const STARTUP_REGISTRY_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 const STARTUP_REGISTRY_VALUE: &str = "FocuSD Island";
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -60,6 +65,7 @@ const AGENT_RUNNING_SCRIPT: &str = include_str!("../../scripts/focusd-agent-runn
 const AGENT_STATUS_SCRIPT: &str = include_str!("../../scripts/focusd-agent-status.ps1");
 
 static WINDOW_STATE: OnceLock<Mutex<IslandWindowState>> = OnceLock::new();
+static POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy)]
 enum IslandMode {
@@ -108,6 +114,20 @@ struct IslandWindowState {
 }
 
 impl IslandWindowState {
+    fn is_detached(self) -> bool {
+        self.custom_position.is_some() || self.margin_y > 0.0
+    }
+
+    fn top_corner_radius(self) -> f64 {
+        if !self.is_detached() {
+            return 0.0;
+        }
+        match self.mode {
+            IslandMode::Collapsed => 14.0,
+            IslandMode::Expanded => 22.0,
+        }
+    }
+
     fn active_scale(self) -> f64 {
         match self.mode {
             IslandMode::Collapsed => self.collapsed_scale,
@@ -219,7 +239,7 @@ fn set_island_layout(app: AppHandle, layout: IslandLayout) -> Result<(), String>
         state.margin_y = layout.margin_y.clamp(0.0, 160.0);
         *state
     });
-    apply_stage_geometry(&window, state)
+    apply_stage_geometry(&window, state, false)
 }
 
 #[tauri::command]
@@ -233,6 +253,7 @@ fn set_island_interaction(
     collapsed_width: Option<f64>,
     custom_position: Option<IslandPosition>,
     is_tucked: Option<bool>,
+    animate_position: Option<bool>,
     glass_enabled: Option<bool>,
     glass_intensity: Option<f64>,
     glass_tint: Option<String>,
@@ -276,7 +297,11 @@ fn set_island_interaction(
         }
         *state
     });
-    apply_stage_geometry(&window, state)?;
+    apply_stage_geometry(
+        &window,
+        state,
+        animate_position.unwrap_or(true) && previous_state.is_tucked != state.is_tucked,
+    )?;
     apply_glass_material(&window, previous_state, state)
 }
 
@@ -293,6 +318,7 @@ fn start_island_drag(app: AppHandle) -> Result<(), String> {
     }
 
     let position = window.outer_position().map_err(|error| error.to_string())?;
+    POSITION_ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
     mutate_window_state(|state| {
         state.custom_position = Some(IslandPosition {
             x: position.x,
@@ -305,6 +331,7 @@ fn start_island_drag(app: AppHandle) -> Result<(), String> {
     if let Err(error) = window.start_dragging() {
         mutate_window_state(|state| {
             state.is_dragging = false;
+            state.custom_position = current_state.custom_position;
             *state
         });
         return Err(error.to_string());
@@ -352,7 +379,7 @@ fn reset_island_position(app: AppHandle) -> Result<(), String> {
         *state
     });
 
-    apply_stage_geometry(&window, state)
+    apply_stage_geometry(&window, state, false)
 }
 
 #[tauri::command]
@@ -1125,12 +1152,14 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
 
 fn show_island(app: &AppHandle) -> Result<(), String> {
     let window = main_window(app)?;
+    apply_stage_geometry(&window, read_window_state(), false)?;
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())?;
     Ok(())
 }
 
 fn hide_island(app: &AppHandle) {
+    POSITION_ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst);
     if let Ok(window) = main_window(app) {
         let _ = window.hide();
     }
@@ -1192,7 +1221,12 @@ fn apply_glass_material(
     }
 }
 
-fn apply_stage_geometry(window: &WebviewWindow, state: IslandWindowState) -> Result<(), String> {
+fn apply_stage_geometry(
+    window: &WebviewWindow,
+    state: IslandWindowState,
+    animate_position: bool,
+) -> Result<(), String> {
+    let generation = POSITION_ANIMATION_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     // Keep room for the closing animation at every supported panel scale.
     let stage_height = STAGE_WINDOW_HEIGHT
         .max((state.expanded_height * state.expanded_scale).ceil() + STAGE_WINDOW_PADDING_Y);
@@ -1236,9 +1270,48 @@ fn apply_stage_geometry(window: &WebviewWindow, state: IslandWindowState) -> Res
     }
     let (x, y) = resolve_stage_position(positioned_state, centered_x, normal_y, tucked_y);
 
-    window
-        .set_position(Position::Physical(PhysicalPosition::new(x, y)))
-        .map_err(|error| error.to_string())
+    let target = PhysicalPosition::new(x, y);
+    let start = window.outer_position().map_err(|error| error.to_string())?;
+    if !animate_position || start == target {
+        return window
+            .set_position(Position::Physical(target))
+            .map_err(|error| error.to_string());
+    }
+
+    let window = window.clone();
+    thread::spawn(move || {
+        let started_at = Instant::now();
+        loop {
+            if POSITION_ANIMATION_GENERATION.load(Ordering::SeqCst) != generation {
+                break;
+            }
+            let progress = (started_at.elapsed().as_secs_f64()
+                / POSITION_ANIMATION_DURATION.as_secs_f64())
+                .min(1.0);
+            let position = interpolate_stage_position(start, target, progress);
+            if let Err(error) = window.set_position(Position::Physical(position)) {
+                eprintln!("Failed to animate island position: {error}");
+                break;
+            }
+            if progress >= 1.0 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(8));
+        }
+    });
+    Ok(())
+}
+
+fn interpolate_stage_position(
+    start: PhysicalPosition<i32>,
+    target: PhysicalPosition<i32>,
+    progress: f64,
+) -> PhysicalPosition<i32> {
+    let eased = 1.0 - (1.0 - progress.clamp(0.0, 1.0)).powi(3);
+    PhysicalPosition::new(
+        (start.x as f64 + (target.x as f64 - start.x as f64) * eased).round() as i32,
+        (start.y as f64 + (target.y as f64 - start.y as f64) * eased).round() as i32,
+    )
 }
 
 fn monitor_for_island_position(
@@ -1337,6 +1410,12 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
     let island_left = (window_width - island_width) / 2.0;
     let island_top = 0.0;
     let radius = state.mode.corner_radius() * state.active_scale() * physical_scale;
+    let top_radius = state.top_corner_radius() * state.active_scale() * physical_scale;
+    let shoulder_radius = if state.is_detached() {
+        0.0
+    } else {
+        DOCK_SHOULDER_RADIUS * state.active_scale() * physical_scale
+    };
 
     point_in_notch(
         local_x,
@@ -1346,6 +1425,8 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
         island_width,
         island_height,
         radius,
+        top_radius,
+        shoulder_radius,
     )
 }
 
@@ -1357,12 +1438,38 @@ fn point_in_notch(
     width: f64,
     height: f64,
     radius: f64,
+    top_radius: f64,
+    shoulder_radius: f64,
 ) -> bool {
     let right = left + width;
     let bottom = top + height;
 
-    if x < left || x > right || y < top || y > bottom {
+    if y < top || y > bottom {
         return false;
+    }
+
+    if x < left || x > right {
+        // Dock shoulders fill the outside of a quarter circle.
+        if shoulder_radius <= 0.0 || y > top + shoulder_radius {
+            return false;
+        }
+        let center_x = if x < left && x >= left - shoulder_radius {
+            left - shoulder_radius
+        } else if x > right && x <= right + shoulder_radius {
+            right + shoulder_radius
+        } else {
+            return false;
+        };
+        let dx = x - center_x;
+        let dy = y - (top + shoulder_radius);
+        return dx * dx + dy * dy >= shoulder_radius * shoulder_radius;
+    }
+
+    let top_radius = top_radius.min(width / 2.0).min(height / 2.0);
+    if y < top + top_radius && (x < left + top_radius || x > right - top_radius) {
+        let dx = x - x.clamp(left + top_radius, right - top_radius);
+        let dy = y - (top + top_radius);
+        return dx * dx + dy * dy <= top_radius * top_radius;
     }
 
     let radius = radius.min(width / 2.0).min(height);
@@ -1420,7 +1527,7 @@ mod tests {
                 let width = width * scale;
                 let height = height * scale;
                 let radius = mode.corner_radius() * scale;
-                let contains = |x, y| point_in_notch(x, y, 80.0, 0.0, width, height, radius);
+                let contains = |x, y| point_in_notch(x, y, 80.0, 0.0, width, height, radius, 0.0, 0.0);
 
                 assert!(contains(80.0, 0.0));
                 assert!(contains(80.0 + width, 0.0));
@@ -1443,6 +1550,70 @@ mod tests {
     }
 
     #[test]
+    fn detached_island_rounds_top_and_removes_dock_shoulders() {
+        for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
+            let mut detached = state(mode, 1.0, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+            assert_eq!(detached.top_corner_radius(), 0.0);
+            detached.custom_position = Some(IslandPosition { x: 420, y: 180 });
+            assert!(detached.top_corner_radius() > 0.0);
+            let (width, height) = mode.base_size(COLLAPSED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+            let contains = |x, y| point_in_notch(
+                x, y, 80.0, 0.0, width, height, mode.corner_radius(), detached.top_corner_radius(), 0.0,
+            );
+            assert!(!contains(80.0, 0.0));
+            assert!(!contains(80.0 + width, 0.0));
+            assert!(contains(80.0 + width / 2.0, 0.0));
+            assert!(!contains(79.0, 0.0));
+            detached.custom_position = None;
+            assert_eq!(detached.top_corner_radius(), 0.0);
+            detached.margin_y = 20.0;
+            assert!(detached.top_corner_radius() > 0.0);
+        }
+    }
+
+    #[test]
+    fn dock_shoulders_follow_the_inverse_arc_at_each_scale() {
+        for scale in [0.75, 0.82, 1.0, 1.4, 2.1] {
+            let radius = DOCK_SHOULDER_RADIUS * scale;
+            let width = COLLAPSED_ISLAND_WIDTH * scale;
+            let contains = |x, y| point_in_notch(
+                x, y, 80.0, 0.0, width, COLLAPSED_ISLAND_HEIGHT * scale,
+                COLLAPSED_RADIUS * scale, 0.0, radius,
+            );
+            assert!(contains(80.0 - radius / 2.0, 0.0));
+            assert!(contains(80.0 + width + radius / 2.0, 0.0));
+            assert!(!contains(80.0 - radius / 2.0, radius));
+            assert!(!contains(80.0 + width + radius / 2.0, radius));
+            assert!(!contains(80.0 - radius - 1.0, 0.0));
+        }
+    }
+
+    #[test]
+    fn tuck_and_reveal_move_monotonically_between_physical_positions() {
+        for (start, target) in [
+            (PhysicalPosition::new(665, 0), PhysicalPosition::new(665, -32)),
+            (PhysicalPosition::new(-900, -32), PhysicalPosition::new(-900, 270)),
+        ] {
+            assert_eq!(interpolate_stage_position(start, target, 0.0), start);
+            assert_eq!(interpolate_stage_position(start, target, 1.0), target);
+            let middle = interpolate_stage_position(start, target, 0.3);
+            assert_ne!(middle, start);
+            assert_ne!(middle, target);
+            let mut last = start;
+            for frame in 1..=40 {
+                let current = interpolate_stage_position(start, target, frame as f64 / 40.0);
+                assert_eq!(current.x, start.x);
+                if target.y < start.y {
+                    assert!(current.y <= last.y && current.y >= target.y);
+                } else {
+                    assert!(current.y >= last.y && current.y <= target.y);
+                }
+                last = current;
+            }
+        }
+    }
+
+    #[test]
     fn hex_tint_parser_rejects_invalid_values() {
         assert_eq!(parse_hex_color("#101013"), Some((16, 16, 19)));
         assert_eq!(parse_hex_color("101013"), None);
@@ -1457,7 +1628,7 @@ fn build_tray(app: &App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
 
     let mut tray = TrayIconBuilder::new()
-        .tooltip("FocuSD Island")
+        .tooltip("fly-island")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -1521,7 +1692,7 @@ pub fn run() {
             }
             translation::init(app.handle());
             if let Ok(window) = main_window(app.handle()) {
-                if let Err(error) = apply_stage_geometry(&window, IslandWindowState::default()) {
+                if let Err(error) = apply_stage_geometry(&window, IslandWindowState::default(), false) {
                     eprintln!("failed to size and position island window: {error}");
                 }
                 start_cursor_passthrough_loop(window);

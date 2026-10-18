@@ -144,6 +144,7 @@ type AgentHooksInstallResult = {
 
 type AgentHooksInstallState = "idle" | "installing" | "installed" | "error";
 type AppearanceMode = "classic" | "liquidGlass";
+type IslandFont = "system" | "pixel";
 type NativeGlassState = "active" | "css-fallback" | "disabled";
 
 type IslandPosition = {
@@ -154,6 +155,7 @@ type IslandPosition = {
 type IslandSettings = {
   topEdgeLayoutVersion: 1;
   appearanceMode: AppearanceMode;
+  fontFamily: IslandFont;
   glassIntensity: number;
   opacity: number;
   collapsedScale: number;
@@ -183,6 +185,7 @@ type IslandShellProps = {
   appearanceMode: AppearanceMode;
   nativeGlassState: NativeGlassState;
   isTucked: boolean;
+  isDetached: boolean;
   showTitle: boolean;
   activeTaskTitle: string | null;
   pendingTodoCount: number;
@@ -264,6 +267,7 @@ const DEFAULT_CLIPBOARD_HISTORY: ClipboardHistorySnapshot = {
 const DEFAULT_SETTINGS: IslandSettings = {
   topEdgeLayoutVersion: 1,
   appearanceMode: "liquidGlass",
+  fontFamily: "system",
   glassIntensity: 72,
   opacity: 95,
   collapsedScale: 0.82,
@@ -542,6 +546,7 @@ function normalizeSettings(
 
   return {
     topEdgeLayoutVersion: 1,
+    fontFamily: settings?.fontFamily === "pixel" ? "pixel" : "system",
     appearanceMode:
       settings?.appearanceMode === "classic" ||
       settings?.appearanceMode === "liquidGlass"
@@ -900,6 +905,7 @@ function IslandShell({
   appearanceMode,
   nativeGlassState,
   isTucked,
+  isDetached,
   showTitle,
   activeTaskTitle,
   pendingTodoCount,
@@ -932,6 +938,7 @@ function IslandShell({
     `island--${mode}`,
     `island--${page}`,
     `island--appearance-${appearanceMode}`,
+    isDetached ? "island--detached" : "island--docked",
     isLiquidGlass ? `island--glass-${nativeGlassState}` : "",
     showTitle ? "" : "island--title-hidden",
   ]
@@ -947,7 +954,7 @@ function IslandShell({
   ].join(" ");
   const collapsedLabel = activeTaskTitle
     ? `正在专注：${activeTaskTitle}`
-    : "FocuSD Island";
+    : "fly-island";
 
   useEffect(
     () => () => {
@@ -1058,6 +1065,11 @@ function IslandShell({
     <section
       className={className}
       aria-label={collapsedLabel}
+      onClick={(event) => {
+        if (!isExpanded && event.target === event.currentTarget) {
+          onOpenPage(page);
+        }
+      }}
       onPointerMove={handleGlassPointerMove}
       onPointerLeave={resetGlassPointer}
       onMouseEnter={() => {
@@ -1066,190 +1078,192 @@ function IslandShell({
         }
       }}
     >
-      {isLiquidGlass && (
-        <div className="island__glass" aria-hidden="true">
-          <span className="island__glass-refraction" />
-          <span className="island__glass-highlight" />
-        </div>
-      )}
-      <div
-        className="island__collapsed"
-        aria-hidden={isExpanded}
-        inert={isExpanded}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            onOpenPage(page);
-          }
-        }}
-      >
-        <button
-          className="island__open-button"
-          type="button"
-          aria-label={`${collapsedLabel}，点击展开`}
-          aria-expanded={isExpanded}
-          aria-controls="island-panel"
-          onPointerDown={prepareWindowDrag}
-          onPointerMove={handleWindowDragMove}
-          onPointerUp={cancelWindowDrag}
-          onPointerCancel={cancelWindowDrag}
+      <div className="island__surface">
+        {isLiquidGlass && (
+          <div className="island__glass" aria-hidden="true">
+            <span className="island__glass-refraction" />
+            <span className="island__glass-highlight" />
+          </div>
+        )}
+        <div
+          className="island__collapsed"
+          aria-hidden={isExpanded}
+          inert={isExpanded}
           onClick={(event) => {
-            if (event.detail === 0 || !didDragRef.current) {
+            if (event.target === event.currentTarget) {
               onOpenPage(page);
             }
           }}
         >
-          <span className={pulseClassName} title={agentStatusLabel} />
-          {showTitle && <span className="island__brand">FocuSD</span>}
-          {activeTaskTitle ? (
-            <span className="island__active-task">
-              {showTitle ? "· " : ""}
-              {activeTaskTitle}
-            </span>
-          ) : (
-            <span className="island__todo-count">
-              {showTitle ? "· " : ""}
-              剩余{pendingTodoCount}个待办
-            </span>
-          )}
-        </button>
-        <MusicWaveButton
-          isAvailable={mediaState.available || mediaState.audioActive}
-          isPlaying={isMusicPlaying}
-          audioPeak={mediaState.audioPeak}
-          label="打开音乐控制"
-          onClick={() => onOpenPage("music")}
-        />
-        <button
-          className="island__quiet-button"
-          type="button"
-          title="收起"
-          aria-label="收起岛屿"
-          onClick={(event) => {
-            event.stopPropagation();
-            onTuck();
-          }}
-        />
-      </div>
-
-      <div
-        id="island-panel"
-        className="island__expanded"
-        aria-hidden={!isExpanded}
-        inert={!isExpanded}
-      >
-        <header className="island__header">
-          <div className="island__title">
-            <CircleDot
-              className={agentStatusIconClassName}
-              size={16}
-              strokeWidth={2.2}
-              aria-label={agentStatusLabel}
-            />
-            <span>FocuSD</span>
-          </div>
-
-          <div
-            className="editor-dots"
-            aria-label="岛屿编辑"
-          >
-            <button
-              className={`dot-button dot-button--todo ${
-                page === "todo" ? "dot-button--active" : ""
-              }`}
-              type="button"
-              title="任务清单"
-              aria-label="任务清单"
-              onClick={(event) => {
-                event.stopPropagation();
-                onPageChange("todo");
-              }}
-            />
-            <button
-              className={`dot-button dot-button--music ${
-                page === "music" ? "dot-button--active" : ""
-              }`}
-              type="button"
-              title="Music"
-              aria-label="Music"
-              onClick={(event) => {
-                event.stopPropagation();
-                onPageChange("music");
-              }}
-            />
-            <button
-              className={`dot-button dot-button--clipboard ${
-                page === "clipboard" ? "dot-button--active" : ""
-              }`}
-              type="button"
-              title="剪贴板历史"
-              aria-label="剪贴板历史"
-              onClick={(event) => {
-                event.stopPropagation();
-                onPageChange("clipboard");
-              }}
-            />
-            <button
-              className={`dot-button dot-button--layout ${
-                page === "layout" ? "dot-button--active" : ""
-              }`}
-              type="button"
-              title="布局编辑"
-              aria-label="布局编辑"
-              onClick={(event) => {
-                event.stopPropagation();
-                onPageChange("layout");
-              }}
-            />
-          </div>
-
           <button
-            className="island__collapse-target"
+            className="island__open-button"
             type="button"
-            aria-label="折叠岛屿"
-            data-window-drag="false"
-            onClick={onCollapse}
+            aria-label={`${collapsedLabel}，点击展开`}
+            aria-expanded={isExpanded}
+            aria-controls="island-panel"
+            onPointerDown={prepareWindowDrag}
+            onPointerMove={handleWindowDragMove}
+            onPointerUp={cancelWindowDrag}
+            onPointerCancel={cancelWindowDrag}
+            onClick={(event) => {
+              if (event.detail === 0 || !didDragRef.current) {
+                onOpenPage(page);
+              }
+            }}
+          >
+            <span className={pulseClassName} title={agentStatusLabel} />
+            {showTitle && <span className="island__brand">fly-island</span>}
+            {activeTaskTitle ? (
+              <span className="island__active-task">
+                {showTitle ? "· " : ""}
+                {activeTaskTitle}
+              </span>
+            ) : (
+              <span className="island__todo-count">
+                {showTitle ? "· " : ""}
+                剩余{pendingTodoCount}个待办
+              </span>
+            )}
+          </button>
+          <MusicWaveButton
+            isAvailable={mediaState.available || mediaState.audioActive}
+            isPlaying={isMusicPlaying}
+            audioPeak={mediaState.audioPeak}
+            label="打开音乐控制"
+            onClick={() => onOpenPage("music")}
           />
+          <button
+            className="island__quiet-button"
+            type="button"
+            title="收起"
+            aria-label="收起岛屿"
+            onClick={(event) => {
+              event.stopPropagation();
+              onTuck();
+            }}
+          />
+        </div>
 
-          <div className="window-actions">
-            <button
-              className="icon-button"
-              type="button"
-              title="翻译（Alt+C）"
-              aria-label="打开翻译"
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenTranslator();
-              }}
+        <div
+          id="island-panel"
+          className="island__expanded"
+          aria-hidden={!isExpanded}
+          inert={!isExpanded}
+        >
+          <header className="island__header">
+            <div className="island__title">
+              <CircleDot
+                className={agentStatusIconClassName}
+                size={16}
+                strokeWidth={2.2}
+                aria-label={agentStatusLabel}
+              />
+              <span>fly-island</span>
+            </div>
+
+            <div
+              className="editor-dots"
+              aria-label="岛屿编辑"
             >
-              <Languages size={17} strokeWidth={2.2} />
-            </button>
+              <button
+                className={`dot-button dot-button--todo ${
+                  page === "todo" ? "dot-button--active" : ""
+                }`}
+                type="button"
+                title="任务清单"
+                aria-label="任务清单"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPageChange("todo");
+                }}
+              />
+              <button
+                className={`dot-button dot-button--music ${
+                  page === "music" ? "dot-button--active" : ""
+                }`}
+                type="button"
+                title="Music"
+                aria-label="Music"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPageChange("music");
+                }}
+              />
+              <button
+                className={`dot-button dot-button--clipboard ${
+                  page === "clipboard" ? "dot-button--active" : ""
+                }`}
+                type="button"
+                title="剪贴板历史"
+                aria-label="剪贴板历史"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPageChange("clipboard");
+                }}
+              />
+              <button
+                className={`dot-button dot-button--layout ${
+                  page === "layout" ? "dot-button--active" : ""
+                }`}
+                type="button"
+                title="布局编辑"
+                aria-label="布局编辑"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onPageChange("layout");
+                }}
+              />
+            </div>
+
             <button
-              className="icon-button"
+              className="island__collapse-target"
               type="button"
-              title="复位"
-              aria-label="恢复岛屿默认位置"
-              onClick={(event) => {
-                event.stopPropagation();
-                onResetPosition();
-              }}
-            >
-              <LocateFixed size={17} strokeWidth={2.2} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              title="最小化到托盘"
-              aria-label="最小化到托盘"
-              onClick={(event) => {
-                event.stopPropagation();
-                onMinimize();
-              }}
-            >
-              <Minus size={18} strokeWidth={2.2} />
-            </button>
-          </div>
-        </header>
-        <div className="island__content">{children}</div>
+              aria-label="折叠岛屿"
+              data-window-drag="false"
+              onClick={onCollapse}
+            />
+
+            <div className="window-actions">
+              <button
+                className="icon-button"
+                type="button"
+                title="翻译（Alt+C）"
+                aria-label="打开翻译"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenTranslator();
+                }}
+              >
+                <Languages size={17} strokeWidth={2.2} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                title="复位"
+                aria-label="恢复岛屿默认位置"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onResetPosition();
+                }}
+              >
+                <LocateFixed size={17} strokeWidth={2.2} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                title="最小化到托盘"
+                aria-label="最小化到托盘"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onMinimize();
+                }}
+              >
+                <Minus size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+          </header>
+          <div className="island__content">{children}</div>
+        </div>
       </div>
     </section>
   );
@@ -1678,6 +1692,22 @@ function LayoutEditor({
             onSettingsChange({ ...settings, appearanceMode })
           }
         />
+        <div className="appearance-mode-control">
+          <span>字体</span>
+          <div className="appearance-mode-control__segments" role="group" aria-label="岛屿字体">
+            {([["system", "默认字体"], ["pixel", "像素字体"]] as const).map(([fontFamily, label]) => (
+              <button
+                key={fontFamily}
+                className={settings.fontFamily === fontFamily ? "appearance-mode-control--active" : ""}
+                type="button"
+                aria-pressed={settings.fontFamily === fontFamily}
+                onClick={() => onSettingsChange({ ...settings, fontFamily })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         {settings.appearanceMode === "liquidGlass" && (
           <SliderControl
             label="玻璃强度"
@@ -1733,7 +1763,7 @@ function LayoutEditor({
           onChange={onLaunchAtStartupChange}
         />
         <ToggleControl
-          label="展示“title”"
+          label="显示岛屿名称"
           checked={settings.showTitle}
           onChange={(showTitle) => onSettingsChange({ ...settings, showTitle })}
         />
@@ -3373,6 +3403,10 @@ function ClipboardHistoryPanel({
 function App() {
   const [mode, setMode] = useState<IslandMode>("collapsed");
   const [isTucked, setIsTucked] = useState(false);
+  const [isPositionDetached, setIsPositionDetached] = useState(() => loadIslandPosition() !== null);
+  const [reducedMotion, setReducedMotion] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const [page, setPage] = useState<IslandPage>("todo");
   const [mediaState, setMediaState] =
     useState<MediaState>(DEFAULT_MEDIA_STATE);
@@ -3625,6 +3659,7 @@ function App() {
           collapsedWidth: nextCollapsedWidth,
           customPosition: islandPositionRef.current,
           isTucked: nextIsTucked,
+          animatePosition: !reducedMotion,
             glassEnabled: nextSettings.appearanceMode === "liquidGlass",
             glassIntensity: nextSettings.glassIntensity,
             glassTint: nextSettings.islandBackgroundColor,
@@ -3640,7 +3675,7 @@ function App() {
         );
       }
     },
-    [],
+    [reducedMotion],
   );
 
   const showReadyIsland = useCallback(async () => {
@@ -3797,10 +3832,12 @@ function App() {
   }, []);
 
   const startIslandDrag = useCallback(() => {
+    setIsPositionDetached(true);
     void invoke("start_island_drag").catch((error) => {
+      setIsPositionDetached(isPositionDetached);
       console.error("Failed to start island drag", error);
     });
-  }, []);
+  }, [isPositionDetached]);
 
   const resetIslandPosition = useCallback(async () => {
     try {
@@ -3808,6 +3845,7 @@ function App() {
       await syncNativeLayout(nextSettings);
       await invoke("reset_island_position");
       islandPositionRef.current = null;
+      setIsPositionDetached(false);
       window.localStorage.removeItem(ISLAND_POSITION_STORAGE_KEY);
       setSettings(nextSettings);
     } catch (error) {
@@ -4703,6 +4741,7 @@ function App() {
 
     void listen<IslandPosition>("island-position-changed", ({ payload }) => {
       islandPositionRef.current = payload;
+      setIsPositionDetached(true);
       window.localStorage.setItem(
         ISLAND_POSITION_STORAGE_KEY,
         JSON.stringify(payload),
@@ -4723,6 +4762,13 @@ function App() {
       didCancel = true;
       unlisten?.();
     };
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateReducedMotion = () => setReducedMotion(query.matches);
+    query.addEventListener("change", updateReducedMotion);
+    return () => query.removeEventListener("change", updateReducedMotion);
   }, []);
 
   useEffect(() => {
@@ -4810,13 +4856,14 @@ function App() {
   }, []);
 
   return (
-    <main className="stage" style={stageStyle}>
+    <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
       <IslandShell
         mode={mode}
         page={page}
         appearanceMode={settings.appearanceMode}
         nativeGlassState={nativeGlassState}
         isTucked={isTucked}
+        isDetached={isPositionDetached || settings.marginY > 0}
         showTitle={settings.showTitle}
         activeTaskTitle={activeTaskTitle}
         pendingTodoCount={openTodoCount}

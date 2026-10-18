@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "FocuSD Island",
+  "productName": "fly-island",
   "version": "0.2.4",
   "identifier": "com.focusd.island",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "FocuSD Island",
+        "title": "fly-island",
         "width": 820,
         "height": 460,
         "decorations": false,
@@ -26,7 +26,7 @@
       },
       {
         "label": "translation",
-        "title": "FocuSD 翻译",
+        "title": "fly-island 翻译",
         "url": "index.html?window=translation",
         "width": 480,
         "height": 640,
