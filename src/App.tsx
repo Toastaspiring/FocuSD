@@ -230,7 +230,7 @@ const TODO_MAX_ESTIMATED_TITLE_LINES = 5;
 const TODO_GROW_START_ROWS = 2;
 const TODO_SCROLL_START_ROWS = 6;
 const MAX_CUSTOM_SETTING_PRESETS = 6;
-const DEFAULT_TASK_TEXT_COLOR = "#1afbff";
+const DEFAULT_TASK_TEXT_COLOR = "#f0ff24";
 const DEFAULT_CLIPBOARD_SHORTCUT = "Ctrl+X";
 const AUDIO_ACTIVE_THRESHOLD = 0.000015;
 const DEFAULT_MEDIA_STATE: MediaState = {
@@ -274,7 +274,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   expandedScale: 0.91,
   marginY: 0,
   taskTextColor: DEFAULT_TASK_TEXT_COLOR,
-  pulseColor: "#49e18f",
+  pulseColor: "#3ae489",
   pulseBrightness: 100,
   islandBackgroundColor: "#101013",
   todoBackgroundColor: "#ffffff",
