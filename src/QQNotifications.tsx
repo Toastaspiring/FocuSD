@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowUpRight, Inbox, KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { ArrowUpRight, KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQNotifications.css";
 
@@ -219,7 +220,7 @@ export function QQNotificationPanel({ controller, navigation }: { controller: QQ
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       <div className="qq-panel__list" role="list" aria-label="最近收到的 QQ 通知" aria-busy={busy}>
         {snapshot.items.length === 0 ? (
-          <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><Inbox size={26} strokeWidth={1.5} /></span><span>暂无消息</span></div>
+          <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>暂无消息</span></div>
         ) : snapshot.items.map((item) => (
           <article className="qq-panel__item" key={item.id} role="listitem">
             <button type="button" disabled={busy} onClick={() => void openQQ()} aria-label={`打开 QQ：${item.title}`}>

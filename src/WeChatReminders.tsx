@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowUpRight, MessageCircle, MessagesSquare, Power } from "lucide-react";
+import { ArrowUpRight, Power } from "lucide-react";
+import { MessageSourceIcon } from "./MessageSourceIcon";
 import "./WeChatReminders.css";
 
 const ENABLED_KEY = "focusd-island-wechat-reminders-enabled";
@@ -151,7 +152,7 @@ export function WeChatReminderPanel({ controller, navigation }: { controller: We
       </header>
       {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
       <div className={`qq-panel__empty${snapshot.pending ? " wechat-reminder-state--pending" : ""}`} role="status">
-        <span className="message-empty-icon">{snapshot.pending ? <MessagesSquare size={26} strokeWidth={1.5} /> : <MessageCircle size={26} strokeWidth={1.5} />}</span>
+        <span className="message-empty-icon"><MessageSourceIcon source="wechat" size={28} /></span>
         <span>{snapshot.pending ? "有新提醒" : "暂无提醒"}</span>
       </div>
     </section>

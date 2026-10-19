@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowRight, ArrowUpRight, AtSign, CircleHelp, KeyRound, LoaderCircle, MailOpen, Power, RefreshCw, Unplug } from "lucide-react";
+import { ArrowRight, ArrowUpRight, AtSign, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Unplug } from "lucide-react";
+import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQMail.css";
 
@@ -225,7 +226,7 @@ export function QQMailPanel({ controller, navigation }: { controller: QQMailCont
         <>
           <div className="qq-panel__list qq-mail-list" role="list" aria-label="收件箱最近 20 封邮件" aria-busy={snapshot.syncing}>
             {snapshot.items.length === 0 ? (
-              <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={26} strokeWidth={1.5} className="qq-mail-spinning" /> : <MailOpen size={26} strokeWidth={1.5} />}</span><span>{snapshot.syncing ? "同步中" : "暂无邮件"}</span></div>
+              <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={26} strokeWidth={1.5} className="qq-mail-spinning" /> : <MessageSourceIcon source="qqMail" size={28} />}</span><span>{snapshot.syncing ? "同步中" : "暂无邮件"}</span></div>
             ) : snapshot.items.map((item) => (
               <article className={`qq-panel__item qq-mail-item${item.unread ? " qq-mail-item--unread" : ""}`} key={item.id} role="listitem">
                 <button type="button" onClick={() => void openMail()} aria-label={`打开 QQ 邮箱：${item.subject}${item.unread ? "，未读" : ""}`}>

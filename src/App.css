@@ -818,6 +818,16 @@ input,
     transform 140ms ease;
 }
 
+.message-brand-icon {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.message-brand-icon--wechat {
+  border-radius: 4px;
+}
+
 .icon-button:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.15);
