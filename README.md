@@ -3,12 +3,12 @@
 
   <h1>FocuSD Island</h1>
 
-  <p>一款 Windows 优先的桌面灵动岛，把待办、剪贴板、Codex 状态和快捷翻译放在屏幕顶部。</p>
+  <p>一款 Windows 桌面效率工具，在屏幕顶部集中管理待办、剪贴板、音乐、AI 状态、快捷翻译和消息提醒。</p>
 
   <p>
-    <a href="https://github.com/flyl1u/FocuSD/releases/latest">下载 Release</a>
+    <a href="https://github.com/flyl1u/fly-island/releases/latest">下载 Release</a>
     ·
-    <a href="https://github.com/flyl1u/FocuSD/issues">反馈 Issue</a>
+    <a href="https://github.com/flyl1u/fly-island/issues">反馈 Issue</a>
   </p>
 
   <p>
@@ -21,7 +21,7 @@
 
 ## 这是什么
 
-这是一款 Windows 优先的桌面灵动岛，把待办、剪贴板、Codex 状态和快捷翻译放在屏幕顶部。
+这是一款 Windows 桌面效率工具。待办与日记、剪贴板历史、音乐控制、AI 编程助手状态、快捷翻译和消息提醒都能从屏幕顶部的悬浮岛快速访问。
 
 FocuSD 以轻量、无边框、始终置顶的悬浮岛形式运行。它会在需要时展开，用完后回到紧凑状态，减少为了获取一条信息而切换窗口的次数。
 
@@ -33,44 +33,54 @@ FocuSD 以轻量、无边框、始终置顶的悬浮岛形式运行。它会在�
 
 我想到了苹果的灵动岛，它把外卖配送、计时器、媒体控制等信息集中到一个小岛上，缩短了我们获取信息的路程。于是，FocuSD 诞生了。这个名字寓意 **Focu Study and DeepWork**，专注学习和深度工作，项目使用更轻量的 Tauri 架构开发
 
-## 解决了什么问题
+## 功能
 
 FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切换。
 
-它把一些高频、但原本分散在不同软件中的操作放到了屏幕顶部：
+FocuSD 把分散在不同窗口中的高频操作放到一个可折叠、可展开的悬浮岛里：
 
-- **Todo List**：随手记录和查看当前待办，不需要反复打开笔记软件。
-- **Clipboard**：快速找到最近复制过的内容，减少重复查找和复制。
-- **Codex Status**：随时查看 Codex 当前任务状态，不需要频繁切回窗口确认进度。
-- **Quick Translate**：复制选中的文字后快速翻译，减少在浏览器和翻译工具之间来回跳转。
-- **QQ 消息**：读取本机 QQ 的 Windows 系统通知，在折叠岛上短暂预览，并查看最近 20 条通知。
-- **微信提醒**：微信任务栏发出提醒时在岛上提示，点击打开微信；首版不显示聊天正文或准确未读数。
-- **QQ 邮箱**：连接一个 QQ 邮箱，每分钟检查新邮件，显示收件箱未读总数和最近 20 封邮件；只读同步，不改变已读状态。
+- **待办、每日笔记与归档**：管理当天任务、标记完成、设置当前任务；记录每日笔记并浏览历史归档。可选择自动结转未完成任务，将任务和笔记保存为 Markdown。
+- **图文剪贴板历史**：记录复制过的文本和图片，搜索内容或备注、收藏常用项、添加备注、删除记录，并一键复制回剪贴板。历史数量、图片记录和全局唤出快捷键均可设置。
+- **音乐与系统音频**：通过 Windows 媒体会话切换上一首、播放/暂停和下一首，并用动态波形显示音频活动。
+- **AI 状态灯**：通过 Codex 和 Claude Code 生命周期钩子显示任务运行、完成或需要关注的状态，可在设置中安装或修复钩子。
+- **DeepSeek 快捷翻译**：用全局快捷键打开独立翻译窗口，自动判断中英方向或手动指定；可从剪贴板填入原文并复制译文。
+- **QQ、微信与 QQ 邮箱**：QQ 通知可在岛上预览并查看最近 20 条；微信使用任务栏提醒事件；QQ 邮箱只在新邮件到达时短暂预览，并可通过 IMAP 查看未读数和最近 20 封邮件。
+- **外观与启动设置**：切换经典或液态玻璃外观、系统或像素字体，调整大小、透明度、颜色和顶部距离；保存最多 6 个自定义样式预设、控制标题显示和开机自启动。
 
-这些功能本身并不复杂，FocuSD 真正想做的是**缩短获取高频信息的路径**：需要的时候看一眼屏幕顶部，用完之后继续专注于当前的事情
+待办、剪贴板和应用设置保存在本机。微信提醒只表示微信请求了任务栏关注，不读取聊天正文、发送人或准确未读数。QQ 通知只保留在本次运行的内存中；QQ 邮箱不下载正文或附件，也不会改变邮件已读状态。
 
-## 如何使用
+## 使用说明
 
-项目使用以下技术构建：
+展开岛屿即可切换待办、音乐、剪贴板、设置和消息页面。默认使用液态玻璃外观，岛屿名称隐藏，任务文字为白色；设置中的样式预设可保存和恢复个性化布局。
+
+### 功能设置
+
+- **QQ 和微信提醒**：首次默认开启。QQ 需要 Windows 通知访问权限，且 QQ 已登录并启用系统通知；微信需要电脑版保持登录并发出任务栏提醒。两个来源可分别在「设置 → 消息接收」或消息页面关闭。参见 [QQ 通知说明](docs/qq-notification-compatibility.md)和[微信提醒说明](docs/wechat-reminder-compatibility.md)。
+
+- **QQ 邮箱**：在邮箱设置中开启 IMAP 并生成授权码，然后在消息页面填写 `@qq.com` 地址和授权码（不是 QQ 登录密码）。凭据保存在 Windows 凭据管理器。支持手动刷新、暂停接收和断开连接；首次同步不提醒历史邮件。详见 [QQ 邮箱接入说明](docs/qq-mail.md)。
+
+- **快捷翻译**：默认按 `Alt+C` 打开翻译窗口。首次使用时配置 DeepSeek API 密钥，密钥保存在 Windows 凭据管理器。提交翻译时，原文会发送到 DeepSeek API；可选择自动识别、中译英或英译中。按 `Tab` 可填入最新剪贴板文本。
+
+- **AI 状态灯**：在「设置 → AI Agent 状态灯」选择「安装/修复」，然后重启 Codex 或运行 Claude Code 的终端。Codex 首次使用钩子时按提示信任配置。详见 [AI Agent 状态灯说明](docs/agent-status-hooks.md)。
+
+- **剪贴板历史**：可在设置中关闭记录、调整图片捕获和历史数量，并录制唤出快捷键。历史记录保存在本机应用数据目录。
+
+### 技术栈
 
 - Tauri 2：Windows 桌面应用外壳和原生能力
 - React 19 + TypeScript：前端界面和交互
 - Rust：窗口、快捷键、剪贴板、媒体和文件等桌面能力
 - pnpm：依赖安装与项目脚本
 
-QQ 消息首次默认开启，程序自动连接通知通道，并在 QQ 通知注册缺失时尝试后台修复。Windows 如需通知访问授权，首次启动会请求一次；拒绝或关闭授权后不会每次启动重复提示，可在设置中处理。QQ 仍需在本机登录并发出系统通知。通知内容只保留在本次运行的内存中。详见 [QQ 通知接入与修复说明](docs/qq-notification-compatibility.md)。
-
-微信提醒首次默认开启，自动监听已登录电脑版微信的任务栏请求关注事件，无需打开微信提示音。两项接收开关均可在「设置 → 消息接收」或消息页面关闭，重启保留选择；旧版本中已主动关闭的开关保持关闭。参见 [微信提醒接入说明](docs/wechat-reminder-compatibility.md)。
-
-QQ 邮箱在同一消息页面的「QQ 邮箱」中连接。先在 QQ 邮箱设置里开启 IMAP 并生成授权码，再填写 `@qq.com` 邮箱地址和授权码（不是 QQ 登录密码）。授权码保存到本机 Windows 凭据管理器，只有邮箱地址和启用偏好写入 localStorage。支持手动刷新、暂停接收和断开连接；断开会删除保存的授权码。首次同步不提醒历史邮件，点击新邮件预览或列表打开 QQ 邮箱网页。详见 [QQ 邮箱接入说明](docs/qq-mail.md)。
+## 开发与构建
 
 ### 从源码构建
 
 需要 Windows 10/11、Node.js、pnpm、Rust、Visual Studio C++ Build Tools 和 WebView2 Runtime。
 
 ```powershell
-git clone https://github.com/flyl1u/FocuSD.git
-cd FocuSD
+git clone https://github.com/flyl1u/fly-island.git
+cd fly-island
 pnpm install
 pnpm tauri dev
 ```
@@ -86,15 +96,15 @@ pnpm tauri build
 - `src-tauri/target/release/bundle/nsis/FocuSD Island_版本号_x64-setup.exe`
 - `src-tauri/target/release/bundle/msi/FocuSD Island_版本号_x64_en-US.msi`
 
-也可以直接从 [GitHub Releases](https://github.com/flyl1u/FocuSD/releases/latest) 下载 Windows x64 安装包。
+也可以直接从 [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest) 下载 Windows x64 安装包。
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=flyl1u%2Ffocusd&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&legend=top-left" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
   </picture>
 </a>
 
@@ -104,7 +114,7 @@ pnpm tauri build
 
 ## What is this?
 
-FocuSD Island is a Windows-first desktop island that puts your Todo List, clipboard, Codex status, and quick translation at the top of the screen.
+FocuSD Island is a Windows desktop productivity app. Its floating island brings together tasks and daily notes, clipboard history, music controls, AI coding assistant status, quick translation, and message notifications.
 
 It runs as a lightweight, borderless, always-on-top floating island. Expand it when you need information, then return to the compact state and keep working.
 
@@ -118,46 +128,50 @@ Apple's Dynamic Island was an inspiration: it gathers delivery updates, timers, 
 
 ## Features
 
-FocuSD is designed to reduce the number of window switches during work and study:
+FocuSD brings frequent actions from separate windows into one compact island:
 
-- **Todo List**: write down and review current tasks without reopening a notes app.
-- **Clipboard**: find recently copied content quickly instead of searching for it again.
-- **Codex Status**: check the current Codex task state without switching back to Codex.
-- **Quick Translate**: copy selected text and translate it without jumping between a browser and a translation website.
-- **QQ Notifications**: briefly preview local QQ Windows notifications on the collapsed island and review the latest 20 notifications.
-- **WeChat Reminders**: show a reminder when WeChat requests taskbar attention and open WeChat on click; this first version does not show chat text or an exact unread count.
-- **QQ Mail**: connect one QQ mailbox, check every minute, and view the inbox unread total and latest 20 emails without changing read status.
+- **Tasks, daily notes, and archives**: manage today's tasks, mark them complete, set the active task, write a daily note, and browse saved days as cards or a timeline. Optionally carry unfinished tasks forward and save a day as Markdown.
+- **Text and image clipboard history**: search copied content and notes, favorite common items, add notes, remove entries, and copy an item back to the clipboard. Configure image capture, history size, and the global shortcut.
+- **Music and system audio**: control the Windows media session with previous, play/pause, and next actions; a live waveform reflects audio activity.
+- **AI status light**: lifecycle hooks show whether Codex or Claude Code is running, complete, or needs attention. Install or repair the hooks from Settings.
+- **DeepSeek quick translation**: open a separate translation window with a global shortcut, auto-detect Chinese/English or choose a direction, paste the latest clipboard text, and copy the result.
+- **QQ, WeChat, and QQ Mail**: preview QQ Windows notifications and review the latest 20; receive WeChat taskbar-attention reminders; QQ Mail previews new arrivals and shows the mailbox unread count and latest 20 emails over IMAP.
+- **Island appearance and startup**: choose classic or liquid-glass styling and system or pixel fonts; adjust size, opacity, colors, and top spacing; save up to six custom style presets, hide the island title, or enable launch at startup.
 
-The goal is simple: shorten the path to high-frequency information so you can look at the top of the screen and return to your work.
+Tasks, clipboard history, and app preferences stay on the device. WeChat reminders do not read chat text, sender names, or exact unread counts. QQ notifications stay in memory for the current run; QQ Mail does not download message bodies or attachments or change read status.
 
-## Screenshots / Demo
+## Getting started
 
-<a href="https://raw.githubusercontent.com/flyl1u/FocuSD/main/docs/demo.mp4">
-  <img src="https://raw.githubusercontent.com/flyl1u/FocuSD/ac9ba9e0d61a8f779a66bb0b5a52ccef3e515ef7/docs/demo-preview.gif" alt="FocuSD Demo preview">
-</a>
+Expand the island to switch between tasks, music, clipboard, settings, and messages. The first-run appearance uses liquid glass, hides the island title, and displays task text in white.
 
-Click the preview to open the full demo, or [download the demo video](https://raw.githubusercontent.com/flyl1u/FocuSD/main/docs/demo.mp4).
+### Feature setup
 
-## Tech Stack / How to use
+- **QQ and WeChat reminders** are enabled by default. QQ needs Windows notification access, and QQ must be signed in with system notifications enabled. WeChat must be running and issue a taskbar-attention request. Pause either source in **Settings → Message reception** or from the message panel. See the [QQ notification guide (Chinese)](docs/qq-notification-compatibility.md) and [WeChat reminder guide (Chinese)](docs/wechat-reminder-compatibility.md).
+
+- **QQ Mail** connects from the message panel. Enable IMAP in QQ Mail settings, generate an authorization code, then enter your `@qq.com` address and that code (not your QQ login password). The code is stored in Windows Credential Manager. You can refresh, pause receiving, or disconnect to delete the code. Initial sync does not replay old mail. See the [QQ Mail setup guide (Chinese)](docs/qq-mail.md).
+
+- **Quick translation** opens with **Alt+C** by default. Add a DeepSeek API key in the translator settings; it is stored in Windows Credential Manager. Text is sent to the DeepSeek API when you request a translation. Choose automatic detection or a direction, and press **Tab** in the input to paste the latest clipboard text.
+
+- **AI status light**: open **Settings → AI Agent 状态灯** and choose **安装/修复**. Restart Codex and any terminal running Claude Code; trust the new Codex hooks when prompted. See the [AI Agent status guide (Chinese)](docs/agent-status-hooks.md).
+
+- **Clipboard history** captures text and, when enabled, images. Search, favorite, annotate, and copy entries from the clipboard panel. Configure capture settings, history limit, and global shortcut in Settings.
+
+### Tech stack
 
 - Tauri 2 for the Windows desktop shell and native capabilities
 - React 19 + TypeScript for the interface and interactions
 - Rust for windows, shortcuts, clipboard, media, and file capabilities
 - pnpm for dependency management and project scripts
 
-QQ notifications are off by default. Expand the island, select the message bubble in the upper right, enable QQ messages, and grant Windows notification access. QQ must be signed in locally with system notifications enabled. Message content stays in memory for the current run. See the [QQ notification setup and repair guide (Chinese)](docs/qq-notification-compatibility.md) if the Windows notification switch does not stay on.
-
-WeChat reminders are also off by default. Switch to the WeChat section in the same message page to enable them. They use WeChat's taskbar attention requests and do not require notification sounds. See the [WeChat reminder guide (Chinese)](docs/wechat-reminder-compatibility.md).
-
-To connect QQ Mail, open **QQ 邮箱** in the message panel. Enable IMAP in QQ Mail settings, generate an authorization code, then enter your `@qq.com` address and that code (not your QQ login password). The code is stored in Windows Credential Manager; localStorage holds only the address and enabled preference. You can refresh, pause receiving, or disconnect to delete the stored code. Initial sync does not replay old mail. Previews and list items open the QQ Mail website. See the [QQ Mail setup guide (Chinese)](docs/qq-mail.md).
+## Development and build
 
 ### Build from source
 
 You need Windows 10/11, Node.js, pnpm, Rust, Visual Studio C++ Build Tools, and WebView2 Runtime.
 
 ```powershell
-git clone https://github.com/flyl1u/FocuSD.git
-cd FocuSD
+git clone https://github.com/flyl1u/fly-island.git
+cd fly-island
 pnpm install
 pnpm tauri dev
 ```
@@ -173,14 +187,14 @@ The generated installers are placed in:
 - `src-tauri/target/release/bundle/nsis/FocuSD Island_VERSION_x64-setup.exe`
 - `src-tauri/target/release/bundle/msi/FocuSD Island_VERSION_x64_en-US.msi`
 
-You can also download the latest Windows x64 installers from [GitHub Releases](https://github.com/flyl1u/FocuSD/releases/latest).
+You can also download the latest Windows x64 installers from [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest).
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=flyl1u%2Ffocusd&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/focusd&type=date&legend=top-left" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=flyl1u/fly-island&type=date&theme=light&legend=top-left" />
   </picture>
 </a>
