@@ -45,6 +45,7 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 - **Quick Translate**：复制选中的文字后快速翻译，减少在浏览器和翻译工具之间来回跳转。
 - **QQ 消息**：读取本机 QQ 的 Windows 系统通知，在折叠岛上短暂预览，并查看最近 20 条通知。
 - **微信提醒**：微信任务栏发出提醒时在岛上提示，点击打开微信；首版不显示聊天正文或准确未读数。
+- **QQ 邮箱**：连接一个 QQ 邮箱，每分钟检查新邮件，显示收件箱未读总数和最近 20 封邮件；只读同步，不改变已读状态。
 
 这些功能本身并不复杂，FocuSD 真正想做的是**缩短获取高频信息的路径**：需要的时候看一眼屏幕顶部，用完之后继续专注于当前的事情
 
@@ -70,6 +71,8 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 QQ 消息默认关闭。展开岛屿，点击右上角消息气泡，开启「接收 QQ 消息」并完成 Windows 授权；QQ 需要在本机登录并开启系统通知。通知内容只保留在本次运行的内存中。通知开关异常时，参见 [QQ 通知接入与修复说明](docs/qq-notification-compatibility.md)。
 
 微信提醒也默认关闭，在同一消息页面切换到「微信提醒」后开启。它接收微信的任务栏请求关注事件，无需打开微信提示音。参见 [微信提醒接入说明](docs/wechat-reminder-compatibility.md)。
+
+QQ 邮箱在同一消息页面的「QQ 邮箱」中连接。先在 QQ 邮箱设置里开启 IMAP 并生成授权码，再填写 `@qq.com` 邮箱地址和授权码（不是 QQ 登录密码）。授权码保存到本机 Windows 凭据管理器，只有邮箱地址和启用偏好写入 localStorage。支持手动刷新、暂停接收和断开连接；断开会删除保存的授权码。首次同步不提醒历史邮件，点击新邮件预览或列表打开 QQ 邮箱网页。详见 [QQ 邮箱接入说明](docs/qq-mail.md)。
 
 ### 从源码构建
 
@@ -133,6 +136,7 @@ FocuSD is designed to reduce the number of window switches during work and study
 - **Quick Translate**: copy selected text and translate it without jumping between a browser and a translation website.
 - **QQ Notifications**: briefly preview local QQ Windows notifications on the collapsed island and review the latest 20 notifications.
 - **WeChat Reminders**: show a reminder when WeChat requests taskbar attention and open WeChat on click; this first version does not show chat text or an exact unread count.
+- **QQ Mail**: connect one QQ mailbox, check every minute, and view the inbox unread total and latest 20 emails without changing read status.
 
 The goal is simple: shorten the path to high-frequency information so you can look at the top of the screen and return to your work.
 
@@ -154,6 +158,8 @@ Click the preview to open the full demo, or [download the demo video](https://ra
 QQ notifications are off by default. Expand the island, select the message bubble in the upper right, enable QQ messages, and grant Windows notification access. QQ must be signed in locally with system notifications enabled. Message content stays in memory for the current run. See the [QQ notification setup and repair guide (Chinese)](docs/qq-notification-compatibility.md) if the Windows notification switch does not stay on.
 
 WeChat reminders are also off by default. Switch to the WeChat section in the same message page to enable them. They use WeChat's taskbar attention requests and do not require notification sounds. See the [WeChat reminder guide (Chinese)](docs/wechat-reminder-compatibility.md).
+
+To connect QQ Mail, open **QQ 邮箱** in the message panel. Enable IMAP in QQ Mail settings, generate an authorization code, then enter your `@qq.com` address and that code (not your QQ login password). The code is stored in Windows Credential Manager; localStorage holds only the address and enabled preference. You can refresh, pause receiving, or disconnect to delete the stored code. Initial sync does not replay old mail. Previews and list items open the QQ Mail website. See the [QQ Mail setup guide (Chinese)](docs/qq-mail.md).
 
 ### Build from source
 

@@ -1,6 +1,7 @@
 mod clipboard_history;
 mod media_control;
 mod qq_notifications;
+mod qq_mail;
 mod wechat_reminder_source;
 mod wechat_reminders;
 mod translation;
@@ -1669,6 +1670,9 @@ pub fn run() {
                 eprintln!("failed to initialize clipboard history: {error}");
             }
             translation::init(app.handle());
+            if let Err(error) = qq_mail::init(app.handle()) {
+                eprintln!("failed to initialize QQ mail: {error}");
+            }
             if let Err(error) = qq_notifications::init(app.handle()) {
                 eprintln!("failed to initialize QQ notifications: {error}");
             }
@@ -1684,6 +1688,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            qq_mail::get_qq_mail_state,
+            qq_mail::connect_qq_mail,
+            qq_mail::set_qq_mail_enabled,
+            qq_mail::refresh_qq_mail,
+            qq_mail::disconnect_qq_mail,
             wechat_reminders::get_wechat_reminder_state,
             wechat_reminders::set_wechat_reminders_enabled,
             wechat_reminders::open_wechat,

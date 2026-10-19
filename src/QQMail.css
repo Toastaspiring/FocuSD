@@ -1,0 +1,38 @@
+.qq-mail-panel { overflow: hidden; }
+.qq-mail-account > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.qq-mail-form { display: flex; flex-direction: column; flex: 1; gap: 7px; min-height: 0; overflow: hidden; padding: 1px 3px 4px; }
+.qq-mail-fields { display: flex; flex-direction: column; gap: 7px; min-height: 0; overflow-y: auto; padding: 2px; }
+.qq-mail-fields > label { font-size: 13px; font-weight: 600; }
+.qq-mail-fields > input {
+  width: 100%; min-width: 0; flex: 0 0 auto; padding: 9px 11px; color: inherit; font: inherit; font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 9px; background: rgba(255, 255, 255, .06);
+  transition: border-color 160ms, background 160ms;
+}
+.qq-mail-fields > input:focus-visible { outline: 2px solid #9bdcfa; outline-offset: 1px; border-color: transparent; }
+.qq-mail-fields > input::placeholder { color: rgba(241, 246, 250, .55); }
+.qq-mail-fields > input:disabled { opacity: .65; }
+.qq-mail-fields > p { margin: 3px 0; color: rgba(241, 246, 250, .8); font-size: 13px; line-height: 1.6; }
+.qq-mail-form small { flex: 0 0 auto; margin-top: 3px; color: rgba(241, 246, 250, .65); font-size: 11px; line-height: 1.5; }
+.qq-mail-form__actions, .qq-mail-footer { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; gap: 10px; }
+.qq-mail-help { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 0; color: #b9f5dc; font: inherit; font-size: 12px; border: 0; background: transparent; cursor: pointer; }
+.qq-mail-help:hover { color: #e4fff3; }
+.qq-mail-connect { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; padding: 8px 14px; border: 1px solid rgba(135, 236, 194, .3); border-radius: 9px; background: rgba(91, 205, 161, .2); color: #d1ffeb; font: inherit; font-size: 13px; cursor: pointer; transition: background 160ms; }
+.qq-mail-connect:hover { background: rgba(91, 205, 161, .32); }
+.qq-mail-list { padding: 2px; }
+.qq-mail-item > button { transition: background 160ms, border-color 160ms; }
+.qq-mail-item--unread > button { border-color: rgba(135, 236, 194, .18); }
+.qq-mail-item .qq-panel__item-heading strong { display: flex; align-items: center; gap: 7px; color: rgba(241, 246, 250, .8); }
+.qq-mail-item--unread .qq-panel__item-heading strong { color: #d1ffeb; }
+.qq-mail-item .qq-panel__item-heading time { font-size: 11px; color: rgba(241, 246, 250, .65); }
+.qq-mail-item p { font-size: 13px; line-height: 1.5; margin-bottom: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.qq-mail-unread-dot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: #80e9b5; }
+.qq-mail-footer { flex: 0 0 auto; padding: 8px 3px 0; }
+.qq-mail-footer > span { font-size: 11px; color: rgba(241, 246, 250, .65); }
+.qq-mail-badge { animation: qq-mail-appear 180ms ease-out; }
+.qq-mail-spinning { animation: qq-mail-spin 1s linear infinite; }
+@keyframes qq-mail-spin { to { transform: rotate(360deg); } }
+@keyframes qq-mail-appear { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .qq-mail-spinning, .qq-mail-badge { animation: none; }
+  .qq-mail-panel button, .qq-mail-panel input { transition: none; }
+}
