@@ -12,6 +12,7 @@ import {
   type WheelEvent,
 } from "react";
 import {
+  Bell,
   Check,
   CircleDot,
   ClipboardList,
@@ -243,6 +244,7 @@ const MAX_COLLAPSED_TEXT_UNITS = 12;
 const BASE_EXPANDED_ISLAND_HEIGHT = 306;
 const TODO_ARCHIVE_EXPANDED_ISLAND_HEIGHT = 352;
 const MUSIC_EXPANDED_ISLAND_HEIGHT = 286;
+const MESSAGE_EXPANDED_ISLAND_HEIGHT = 350;
 const CLIPBOARD_EXPANDED_ISLAND_HEIGHT = 430;
 const EDITOR_EXPANDED_ISLAND_HEIGHT = 430;
 const TODO_ROW_HEIGHT = 46;
@@ -1185,7 +1187,7 @@ function IslandShell({
           )}
           {(qqNotificationCount > 0 || wechatPending) && (
             <button className="island-message-button island-message-button--compact" type="button" aria-label={messageBadgeLabel} title="查看消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
-              <MessagesSquare size={15} strokeWidth={1.8} />
+              <Bell size={15} strokeWidth={1.8} />
               <span className="island-message-button__dot" aria-hidden="true" />
             </button>
           )}
@@ -1289,7 +1291,7 @@ function IslandShell({
 
             <div className="window-actions">
               <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={`消息：${messageBadgeLabel}`} aria-pressed={page === "qq"} title="消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
-                <MessagesSquare size={17} strokeWidth={1.8} />
+                <Bell size={17} strokeWidth={1.8} />
                 {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
@@ -3595,7 +3597,9 @@ function App() {
         ? MUSIC_EXPANDED_ISLAND_HEIGHT
         : page === "clipboard"
           ? CLIPBOARD_EXPANDED_ISLAND_HEIGHT
-          : EDITOR_EXPANDED_ISLAND_HEIGHT;
+          : page === "qq"
+            ? MESSAGE_EXPANDED_ISLAND_HEIGHT
+            : EDITOR_EXPANDED_ISLAND_HEIGHT;
   const layoutSync = useRef<{
     frame: number | null;
     inFlight: boolean;
@@ -4941,6 +4945,14 @@ function App() {
     });
   }, []);
 
+  const messageNavigation = (
+    <div className="message-sources" role="group" aria-label="消息来源">
+      <button type="button" aria-label="QQ 通知" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}><MessageCircle size={15} strokeWidth={1.8} /><span>QQ</span>{qqNotifications.snapshot.items.length > 0 && <span className="message-source-count">{mailBadgeCount(qqNotifications.snapshot.items.length)}</span>}</button>
+      <button type="button" aria-label="微信提醒" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}><MessagesSquare size={15} strokeWidth={1.8} /><span>微信</span>{wechatReminders.snapshot.pending && <span className="message-source-dot" aria-label="有新提醒" />}</button>
+      <button type="button" aria-label="QQ 邮箱" aria-pressed={messageSource === "qqMail"} onClick={() => setMessageSource("qqMail")}><Mail size={15} strokeWidth={1.8} /><span>邮箱</span>{qqMail.snapshot.enabled && (qqMail.snapshot.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(qqMail.snapshot.unreadCount ?? 0)}</span>}</button>
+    </div>
+  );
+
   return (
     <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
       <IslandShell
@@ -4972,15 +4984,8 @@ function App() {
       >
         {page === "qq" && (
           <div className="message-panel">
-            <div className="message-sources" role="group" aria-label="消息来源">
-              <button type="button" aria-label="QQ 通知" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}><MessageCircle size={15} strokeWidth={1.8} /><span>QQ</span>{qqNotifications.snapshot.items.length > 0 && <span className="message-source-count">{mailBadgeCount(qqNotifications.snapshot.items.length)}</span>}</button>
-              <button type="button" aria-label="微信提醒" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}><MessagesSquare size={15} strokeWidth={1.8} /><span>微信</span>{wechatReminders.snapshot.pending && <span className="message-source-dot" aria-label="有新提醒" />}</button>
-              <button type="button" aria-label="QQ 邮箱" aria-pressed={messageSource === "qqMail"} onClick={() => setMessageSource("qqMail")}><Mail size={15} strokeWidth={1.8} /><span>邮箱</span>{qqMail.snapshot.enabled && (qqMail.snapshot.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(qqMail.snapshot.unreadCount ?? 0)}</span>}</button>
-            </div>
-            <div className="message-source-content">
-              {messageSource === "qqMail" ? <QQMailPanel controller={qqMail} />
-                : messageSource === "qq" ? <QQNotificationPanel controller={qqNotifications} /> : <WeChatReminderPanel controller={wechatReminders} />}
-            </div>
+            {messageSource === "qqMail" ? <QQMailPanel controller={qqMail} navigation={messageNavigation} />
+              : messageSource === "qq" ? <QQNotificationPanel controller={qqNotifications} navigation={messageNavigation} /> : <WeChatReminderPanel controller={wechatReminders} navigation={messageNavigation} />}
           </div>
         )}
         {page === "layout" && (

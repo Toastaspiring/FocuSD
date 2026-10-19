@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowUpRight, KeyRound, MessageSquareDashed, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { ArrowUpRight, Inbox, KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQNotifications.css";
 
@@ -186,37 +186,40 @@ export function QQNotificationControls({ controller, compact = false }: { contro
   const needsAccess = snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied";
   return <div className={`qq-panel__controls${compact ? " qq-panel__controls--compact" : ""}`}>
     <div className="qq-panel__control-row">
-      <label className="qq-panel__toggle" title={snapshot.enabled ? "暂停 QQ 通知" : "接收 QQ 通知"}>
-        {!compact && <span>QQ 消息</span>}
+      {compact ? <button className="icon-button message-receiver-toggle" type="button" role="switch" aria-checked={snapshot.enabled} aria-label="接收 QQ 消息" title={snapshot.enabled ? "暂停 QQ 通知" : "接收 QQ 通知"} disabled={busy} onClick={() => void setEnabled(!snapshot.enabled)}><Power size={15} strokeWidth={1.8} /></button> : <label className="qq-panel__toggle" title={snapshot.enabled ? "暂停 QQ 通知" : "接收 QQ 通知"}>
+        <span>QQ 消息</span>
         <span className="message-status" data-state={snapshot.status} role="status" aria-label={STATUS_LABELS[snapshot.status]} title={STATUS_LABELS[snapshot.status]} />
         <input type="checkbox" role="switch" aria-label="接收 QQ 消息" checked={snapshot.enabled} disabled={busy} onChange={(event) => void setEnabled(event.currentTarget.checked)} />
-      </label>
-      {snapshot.enabled && <div className="qq-panel__actions">
+      </label>}
+      {snapshot.enabled && (needsAccess || snapshot.status === "error" || snapshot.error || actionError) && <div className="qq-panel__actions">
         {snapshot.status === "permissionRequired" && <button className="message-action" type="button" title="允许通知访问" aria-label="允许 QQ 通知访问" disabled={busy} onClick={() => void requestAccess()}><KeyRound size={14} strokeWidth={1.8} />授权</button>}
         {(snapshot.status === "permissionDenied" || snapshot.error || actionError) && <button className="icon-button" type="button" title="打开 Windows 通知设置" aria-label="打开 Windows 通知设置" disabled={busy} onClick={() => void openSettings()}><Settings2 size={16} strokeWidth={1.8} /></button>}
         {snapshot.status === "error" && <button className="icon-button" type="button" title="重试授权" aria-label="重试 QQ 通知授权" disabled={busy} onClick={() => void requestAccess()}><KeyRound size={16} strokeWidth={1.8} /></button>}
       </div>}
     </div>
-    {needsAccess && <p className="qq-panel__error" role="alert">{STATUS_LABELS[snapshot.status]}</p>}
-    {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
+    {!compact && needsAccess && <p className="qq-panel__error" role="alert">{STATUS_LABELS[snapshot.status]}</p>}
+    {!compact && (actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
   </div>;
 }
 
-export function QQNotificationPanel({ controller }: { controller: QQNotificationsController }) {
-  const { snapshot, busy, refresh, clear, openQQ } = controller;
+export function QQNotificationPanel({ controller, navigation }: { controller: QQNotificationsController; navigation: ReactNode }) {
+  const { snapshot, busy, actionError, refresh, clear, openQQ } = controller;
+  const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? STATUS_LABELS[snapshot.status] : null);
   return (
     <section className="qq-panel" aria-label="QQ 最近通知">
       <header className="qq-panel__header">
-        <QQNotificationControls controller={controller} compact />
+        {navigation}
         <div className="qq-panel__toolbar">
+          <QQNotificationControls controller={controller} compact />
           <button className="icon-button" type="button" title="打开 QQ" aria-label="打开 QQ" disabled={busy} onClick={() => void openQQ()}><ArrowUpRight size={16} strokeWidth={1.8} /></button>
           <button className="icon-button" type="button" title="刷新" aria-label="刷新 QQ 通知状态" disabled={busy} onClick={() => void refresh()}><RefreshCw size={16} strokeWidth={1.8} /></button>
           <button className="icon-button" type="button" title="清空" aria-label="清空岛内 QQ 通知" disabled={busy || snapshot.items.length === 0} onClick={() => void clear()}><Trash2 size={16} strokeWidth={1.8} /></button>
         </div>
       </header>
+      {error && <p className="qq-panel__error" role="alert">{error}</p>}
       <div className="qq-panel__list" role="list" aria-label="最近收到的 QQ 通知" aria-busy={busy}>
         {snapshot.items.length === 0 ? (
-          <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSquareDashed size={27} strokeWidth={1.4} /></span><span>暂无消息</span></div>
+          <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><Inbox size={26} strokeWidth={1.5} /></span><span>暂无消息</span></div>
         ) : snapshot.items.map((item) => (
           <article className="qq-panel__item" key={item.id} role="listitem">
             <button type="button" disabled={busy} onClick={() => void openQQ()} aria-label={`打开 QQ：${item.title}`}>

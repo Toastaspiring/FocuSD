@@ -77,7 +77,7 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  padding: 0 2px;
+  padding: 0;
 }
 
 .qq-panel__header,
@@ -93,28 +93,36 @@
 .qq-panel__header {
   flex: 0 0 auto;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, .065);
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  margin-bottom: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .075);
 }
 
 .qq-panel__toolbar {
   flex: 0 0 auto;
-  gap: 4px;
+  gap: 2px;
 }
 
 .qq-panel .icon-button,
 .qq-panel__actions .icon-button {
-  width: 30px;
-  height: 30px;
-  background: rgba(255, 255, 255, .045);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: rgba(241, 246, 250, .5);
+  background: transparent;
 }
 
 .qq-panel .icon-button:hover,
 .qq-panel__actions .icon-button:hover {
-  background: rgba(255, 255, 255, .11);
+  color: #fff;
+  background: rgba(255, 255, 255, .07);
+}
+
+.qq-panel .message-receiver-toggle[aria-checked="true"] {
+  color: #b3ddc7;
 }
 
 .qq-panel__controls {
@@ -123,7 +131,7 @@
 }
 
 .qq-panel__controls--compact {
-  flex: 1;
+  flex: 0 0 auto;
   margin: 0;
 }
 
@@ -140,14 +148,6 @@
 
 .qq-panel__toggle > span:first-child:not(.message-status) {
   margin-right: auto;
-}
-
-.qq-panel__controls--compact .qq-panel__toggle,
-.qq-panel__header > .qq-panel__toggle {
-  flex: 0 1 auto;
-  min-height: 30px;
-  padding: 0 2px;
-  background: transparent;
 }
 
 .qq-panel__toggle input {
@@ -257,11 +257,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   min-height: 0;
   height: 100%;
   padding: 16px;
-  color: rgba(241, 246, 250, .42);
+  color: rgba(241, 246, 250, .5);
   font-size: 12px;
   text-align: center;
 }
@@ -269,34 +269,36 @@
 .message-empty-icon {
   display: grid;
   place-items: center;
-  width: 58px;
-  height: 58px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
-  color: rgba(241, 246, 250, .4);
-  border: 1px solid rgba(255, 255, 255, .06);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, .025);
+  color: rgba(241, 246, 250, .28);
 }
 
 .qq-panel__item {
-  margin: 0 0 6px;
+  margin: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .055);
+}
+
+.qq-panel__item:last-child {
+  border-bottom: 0;
 }
 
 .qq-panel__item > button {
   display: block;
   width: 100%;
-  padding: 12px 14px;
+  padding: 13px 8px;
   color: inherit;
   text-align: left;
-  background: rgba(255, 255, 255, .035);
-  border: 1px solid rgba(255, 255, 255, .045);
-  border-radius: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 140ms ease;
 }
 
 .qq-panel__item > button:hover {
-  background: rgba(255, 255, 255, .075);
+  background: rgba(255, 255, 255, .035);
 }
 
 .qq-panel__item-heading {
@@ -311,7 +313,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
