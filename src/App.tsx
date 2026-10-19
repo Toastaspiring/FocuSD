@@ -46,6 +46,11 @@ import {
   useQQNotifications,
   type QQNotificationsController,
 } from "./QQNotifications";
+import {
+  WeChatReminderPanel,
+  useWeChatReminders,
+  type WeChatRemindersController,
+} from "./WeChatReminders";
 import "./App.css";
 
 export type IslandMode = "collapsed" | "expanded";
@@ -187,6 +192,8 @@ type IslandPreset = {
 
 type IslandShellProps = {
   qqNotifications: QQNotificationsController;
+  wechatReminders: WeChatRemindersController;
+  onOpenMessages: (source: "qq" | "wechat") => void;
   mode: IslandMode;
   page: IslandPage;
   appearanceMode: AppearanceMode;
@@ -908,6 +915,8 @@ function createTodoId() {
 
 function IslandShell({
   qqNotifications,
+  wechatReminders,
+  onOpenMessages,
   mode,
   page,
   appearanceMode,
@@ -941,6 +950,12 @@ function IslandShell({
   const isExpanded = mode === "expanded";
   const qqPreview = qqNotifications.preview;
   const qqNotificationCount = qqNotifications.snapshot.items.length;
+  const wechatPending = wechatReminders.snapshot.pending;
+  const wechatPreviewAt = wechatReminders.previewReceivedAt;
+  const preview = wechatPreviewAt !== null && (!qqPreview || wechatPreviewAt > (qqNotifications.previewReceivedAt ?? 0))
+    ? { source: "wechat" as const, title: "微信有新提醒", body: "点击打开微信" }
+    : qqPreview ? { ...qqPreview, source: "qq" as const } : null;
+  const messageBadgeLabel = `QQ ${qqNotificationCount} 条通知${wechatPending ? "，微信有新提醒" : ""}`;
   const isLiquidGlass = appearanceMode === "liquidGlass";
   const isMusicPlaying = mediaState.playbackStatus === "playing";
   const className = [
@@ -1108,18 +1123,19 @@ function IslandShell({
           <button
             className="island__open-button"
             type="button"
-            aria-label={qqPreview ? `QQ 消息：${qqPreview.title}，点击打开 QQ` : `${collapsedLabel}，点击展开`}
-            aria-expanded={qqPreview ? undefined : isExpanded}
-            aria-controls={qqPreview ? undefined : "island-panel"}
+            aria-label={preview ? `${preview.title}，点击打开${preview.source === "qq" ? " QQ" : "微信"}` : `${collapsedLabel}，点击展开`}
+            aria-expanded={preview ? undefined : isExpanded}
+            aria-controls={preview ? undefined : "island-panel"}
             onPointerDown={prepareWindowDrag}
             onPointerMove={handleWindowDragMove}
             onPointerUp={cancelWindowDrag}
             onPointerCancel={cancelWindowDrag}
             onClick={(event) => {
               if (event.detail === 0 || !didDragRef.current) {
-                if (qqPreview) {
-                  void qqNotifications.openQQ().then((opened) => {
-                    if (opened === false) onOpenPage("qq");
+                if (preview) {
+                  const open = preview.source === "qq" ? qqNotifications.openQQ : wechatReminders.openWeChat;
+                  void open().then((opened) => {
+                    if (opened === false) onOpenMessages(preview.source);
                   });
                 } else {
                   onOpenPage(page);
@@ -1128,10 +1144,10 @@ function IslandShell({
             }}
           >
             <span className={pulseClassName} title={agentStatusLabel} />
-            {qqPreview ? (
+            {preview ? (
               <span className="qq-preview" role="status">
                 <MessageCircle size={14} />
-                <span><strong>{qqPreview.title}</strong> · {qqPreview.body || "新消息"}</span>
+                <span><strong>{preview.title}</strong> · {preview.body || "新消息"}</span>
               </span>
             ) : (
               <>
@@ -1150,9 +1166,10 @@ function IslandShell({
               </>
             )}
           </button>
-          {qqNotificationCount > 0 && (
-            <button className="qq-badge" type="button" aria-label={`QQ 消息，${qqNotificationCount} 条通知`} title="查看 QQ 通知" onClick={() => onOpenPage("qq")}>
-              <MessageCircle size={13} /><span>{qqNotificationCount}</span>
+          {(qqNotificationCount > 0 || wechatPending) && (
+            <button className="qq-badge" type="button" aria-label={messageBadgeLabel} title="查看消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
+              <MessageCircle size={13} />{qqNotificationCount > 0 && <span>{qqNotificationCount}</span>}
+              {wechatPending && <span className="wechat-reminder-dot" aria-hidden="true" />}
             </button>
           )}
           <MusicWaveButton
@@ -1254,8 +1271,9 @@ function IslandShell({
             />
 
             <div className="window-actions">
-              <button className="qq-badge" type="button" aria-label="QQ 消息" title={`QQ 消息${qqNotificationCount > 0 ? `（${qqNotificationCount} 条）` : ""}`} onClick={() => onOpenPage("qq")}>
+              <button className="qq-badge" type="button" aria-label={`消息：${messageBadgeLabel}`} title="消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
                 <MessageCircle size={14} />{qqNotificationCount > 0 && <span>{qqNotificationCount}</span>}
+                {wechatPending && <span className="wechat-reminder-dot" aria-hidden="true" />}
               </button>
               <button
                 className="icon-button"
@@ -3437,6 +3455,8 @@ function App() {
   const [mode, setMode] = useState<IslandMode>("collapsed");
   const [isTucked, setIsTucked] = useState(false);
   const qqNotifications = useQQNotifications(mode === "collapsed" && !isTucked);
+  const wechatReminders = useWeChatReminders(mode === "collapsed" && !isTucked);
+  const [messageSource, setMessageSource] = useState<"qq" | "wechat">("qq");
   const [isPositionDetached, setIsPositionDetached] = useState(() => loadIslandPosition() !== null);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -3905,6 +3925,11 @@ function App() {
     setMode("expanded");
     setIsTucked(false);
   }, []);
+
+  const openMessages = useCallback((source: "qq" | "wechat") => {
+    setMessageSource(source);
+    openIslandPage("qq");
+  }, [openIslandPage]);
 
   const openClipboardHistory = useCallback(() => {
     openIslandPage("clipboard");
@@ -4892,6 +4917,8 @@ function App() {
     <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
       <IslandShell
         qqNotifications={qqNotifications}
+        wechatReminders={wechatReminders}
+        onOpenMessages={openMessages}
         mode={mode}
         page={page}
         appearanceMode={settings.appearanceMode}
@@ -4914,7 +4941,17 @@ function App() {
         onReveal={revealIsland}
         onPageChange={setPage}
       >
-        {page === "qq" && <QQNotificationPanel controller={qqNotifications} />}
+        {page === "qq" && (
+          <div className="message-panel">
+            <div className="message-sources" role="group" aria-label="消息来源">
+              <button type="button" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}>QQ 通知</button>
+              <button type="button" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}>微信提醒</button>
+            </div>
+            <div className="message-source-content">
+              {messageSource === "qq" ? <QQNotificationPanel controller={qqNotifications} /> : <WeChatReminderPanel controller={wechatReminders} />}
+            </div>
+          </div>
+        )}
         {page === "layout" && (
           <LayoutEditor
             settings={settings}

@@ -40,7 +40,7 @@ export function useQQNotifications(canPreview: boolean) {
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(isTauri);
-  const [previewWindow, setPreviewWindow] = useState<{ id: string; expiresAt: number } | null>(null);
+  const [previewWindow, setPreviewWindow] = useState<{ id: string; expiresAt: number; receivedAt: number } | null>(null);
   const canPreviewRef = useRef(canPreview);
   const revisionRef = useRef(-1);
   const timingRef = useRef<QQPreviewTiming | null>(null);
@@ -74,9 +74,10 @@ export function useQQNotifications(canPreview: boolean) {
           return;
         }
         if (payload.newestId) {
-          const { timing, expiresAt } = nextQQPreview(timingRef.current, Date.now());
+          const receivedAt = Date.now();
+          const { timing, expiresAt } = nextQQPreview(timingRef.current, receivedAt);
           timingRef.current = timing;
-          setPreviewWindow(expiresAt === null ? null : { id: payload.newestId, expiresAt });
+          setPreviewWindow(expiresAt === null ? null : { id: payload.newestId, expiresAt, receivedAt });
         }
       });
       if (cancelled) { unlisten(); return; }
@@ -149,6 +150,7 @@ export function useQQNotifications(canPreview: boolean) {
 
   return {
     snapshot, busy, actionError, setEnabled, refresh, clear, openQQ,
+    previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null
       : null,

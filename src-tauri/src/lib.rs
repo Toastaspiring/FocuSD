@@ -1,6 +1,8 @@
 mod clipboard_history;
 mod media_control;
 mod qq_notifications;
+mod wechat_reminder_source;
+mod wechat_reminders;
 mod translation;
 
 use serde::{Deserialize, Serialize};
@@ -1670,6 +1672,9 @@ pub fn run() {
             if let Err(error) = qq_notifications::init(app.handle()) {
                 eprintln!("failed to initialize QQ notifications: {error}");
             }
+            if let Err(error) = wechat_reminders::init(app.handle()) {
+                eprintln!("failed to initialize WeChat reminders: {error}");
+            }
             if let Ok(window) = main_window(app.handle()) {
                 if let Err(error) = apply_stage_geometry(&window, IslandWindowState::default(), false) {
                     eprintln!("failed to size and position island window: {error}");
@@ -1679,6 +1684,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            wechat_reminders::get_wechat_reminder_state,
+            wechat_reminders::set_wechat_reminders_enabled,
+            wechat_reminders::open_wechat,
             qq_notifications::get_qq_notification_state,
             qq_notifications::set_qq_notifications_enabled,
             qq_notifications::request_qq_notification_access,
