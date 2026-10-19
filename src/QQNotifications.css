@@ -43,35 +43,6 @@
   outline-offset: 3px;
 }
 
-.qq-preview {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-.qq-preview > svg {
-  flex: 0 0 auto;
-  color: rgba(248, 246, 240, .7);
-}
-
-.qq-preview > span {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.qq-preview strong {
-  color: #fff;
-  font-weight: 600;
-}
-
 .qq-panel {
   display: flex;
   flex-direction: column;

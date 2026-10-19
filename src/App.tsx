@@ -55,7 +55,8 @@ import {
 } from "./WeChatReminders";
 import { QQMailPanel, useQQMail, type QQMailController } from "./QQMail";
 import { MessageSourceIcon } from "./MessageSourceIcon";
-import { latestMessagePreview, mailBadgeCount, MESSAGE_SOURCE_LABELS, type MessageSource } from "./messagePreview";
+import { CollapsedMessageContent } from "./CollapsedMessageContent";
+import { latestMessagePreview, mailBadgeCount, messagePreviewText, MESSAGE_SOURCE_LABELS, type MessageSource } from "./messagePreview";
 import "./App.css";
 
 export type IslandMode = "collapsed" | "expanded";
@@ -920,7 +921,7 @@ function createTodoId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function IslandShell({
+export function IslandShell({
   qqMail,
   qqNotifications,
   wechatReminders,
@@ -960,11 +961,13 @@ function IslandShell({
   const qqNotificationCount = qqNotifications.snapshot.items.length;
   const wechatPending = wechatReminders.snapshot.pending;
   const wechatPreviewAt = wechatReminders.previewReceivedAt;
+  const [latestPreviewAt, setLatestPreviewAt] = useState(0);
   const preview = latestMessagePreview([
     qqPreview ? { ...qqPreview, source: "qq", receivedAt: qqNotifications.previewReceivedAt ?? 0 } : null,
     wechatPreviewAt !== null ? { source: "wechat", title: "微信", body: "有新提醒", receivedAt: wechatPreviewAt } : null,
     qqMail.preview ? { source: "qqMail", title: qqMail.preview.sender, body: qqMail.preview.subject, receivedAt: qqMail.previewReceivedAt ?? 0 } : null,
-  ]);
+  ], latestPreviewAt);
+  if (preview && preview.receivedAt > latestPreviewAt) setLatestPreviewAt(preview.receivedAt);
   const messageBadgeLabel = `QQ ${qqNotificationCount} 条通知${wechatPending ? "，微信有新提醒" : ""}`;
   const isLiquidGlass = appearanceMode === "liquidGlass";
   const isMusicPlaying = mediaState.playbackStatus === "playing";
@@ -1133,7 +1136,7 @@ function IslandShell({
           <button
             className="island__open-button"
             type="button"
-            aria-label={preview ? `${preview.title}，点击打开${MESSAGE_SOURCE_LABELS[preview.source]}` : `${collapsedLabel}，点击展开`}
+            aria-label={preview ? `${messagePreviewText(preview)}，点击打开${MESSAGE_SOURCE_LABELS[preview.source]}` : `${collapsedLabel}，点击展开`}
             aria-expanded={preview ? undefined : isExpanded}
             aria-controls={preview ? undefined : "island-panel"}
             onPointerDown={prepareWindowDrag}
@@ -1155,27 +1158,20 @@ function IslandShell({
             }}
           >
             <span className={pulseClassName} title={agentStatusLabel} />
-            {preview ? (
-              <span className="qq-preview" role="status">
-                <MessageSourceIcon source={preview.source} size={16} />
-                <span><strong>{preview.title}</strong> · {preview.body || "新消息"}</span>
-              </span>
-            ) : (
-              <>
-                {showTitle && <span className="island__brand">fly-island</span>}
-                {activeTaskTitle ? (
-                  <span className="island__active-task">
-                    {showTitle ? "· " : ""}
-                    {activeTaskTitle}
-                  </span>
-                ) : (
-                  <span className="island__todo-count">
-                    {showTitle ? "· " : ""}
-                    剩余{pendingTodoCount}个待办
-                  </span>
-                )}
-              </>
-            )}
+            <CollapsedMessageContent preview={preview} enabled={!isExpanded && !isTucked}>
+              {showTitle && <span className="island__brand">fly-island</span>}
+              {activeTaskTitle ? (
+                <span className="island__active-task">
+                  {showTitle ? "· " : ""}
+                  {activeTaskTitle}
+                </span>
+              ) : (
+                <span className="island__todo-count">
+                  {showTitle ? "· " : ""}
+                  剩余{pendingTodoCount}个待办
+                </span>
+              )}
+            </CollapsedMessageContent>
           </button>
           {qqMail.preview !== null && (
             <button className="island-message-button island-message-button--compact qq-mail-badge" type="button" aria-label="QQ 邮箱有新邮件，查看邮件" title="查看新邮件" onClick={() => onOpenMessages("qqMail")}>

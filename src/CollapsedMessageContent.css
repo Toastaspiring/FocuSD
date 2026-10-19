@@ -1,0 +1,116 @@
+.island__summary {
+  --summary-travel: 9px;
+  --summary-enter-duration: 280ms;
+  --summary-exit-duration: 160ms;
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.island__summary[data-direction="restore"] {
+  --summary-travel: -9px;
+}
+
+.island__summary-layer,
+.island__summary-row {
+  position: absolute;
+  inset: 0;
+}
+
+.island__summary-row {
+  --summary-travel: -9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.island__summary-row--animated {
+  animation: islandSummaryEnter var(--summary-enter-duration) cubic-bezier(0.16, 1, 0.3, 1) 40ms both;
+}
+
+.island__summary-layer--outgoing {
+  animation: islandSummaryExit var(--summary-exit-duration) cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.island-message-preview {
+  --summary-travel: 9px;
+  gap: 7px;
+  color: rgba(248, 246, 240, .88);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.island-message-preview__text {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.island-message-preview__sender,
+.island-message-preview__body {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.island-message-preview__sender {
+  flex: 0 1 auto;
+  max-width: 42%;
+  color: #fff;
+  font-weight: 600;
+}
+
+.island-message-preview__separator {
+  flex: 0 0 auto;
+  color: rgba(248, 246, 240, .4);
+}
+
+.island-message-preview__body {
+  flex: 1;
+}
+
+@keyframes islandSummaryEnter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--summary-travel));
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes islandSummaryExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--summary-travel)));
+    filter: blur(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island__summary-row--animated,
+  .island__summary-layer--outgoing {
+    animation: none;
+  }
+
+  .island__summary-layer--outgoing {
+    visibility: hidden;
+  }
+}
