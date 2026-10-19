@@ -174,6 +174,20 @@ pub fn get_qq_notification_state() -> Result<NotificationSnapshot, String> {
         .clone())
 }
 
+pub(crate) fn diagnostic_state() -> Result<serde_json::Value, String> {
+    let state = service()?.state.lock().map_err(|_| "QQ 通知状态不可用。")?;
+    Ok(notification_diagnostics(&state.snapshot))
+}
+
+fn notification_diagnostics(snapshot: &NotificationSnapshot) -> serde_json::Value {
+    serde_json::json!({
+        "enabled": snapshot.enabled,
+        "status": snapshot.status,
+        "error": snapshot.error,
+        "itemCount": snapshot.items.len(),
+    })
+}
+
 #[tauri::command]
 pub fn set_qq_notifications_enabled(enabled: bool) -> Result<NotificationSnapshot, String> {
     let service = service()?;
@@ -691,6 +705,23 @@ pub async fn open_qq() -> Result<(), String> {
 mod tests {
     use super::*;
     use windows::Win32::UI::WindowsAndMessaging::IsIconic;
+
+    #[test]
+    fn diagnostic_reports_never_include_chat_content() {
+        let snapshot = NotificationSnapshot {
+            items: vec![QQNotification {
+                id: "private-id".into(),
+                title: "private-sender".into(),
+                body: "private-message".into(),
+                created_at: 123,
+            }],
+            ..Default::default()
+        };
+        let report = notification_diagnostics(&snapshot);
+        assert_eq!(report["itemCount"], 1);
+        assert!(!report.to_string().contains("private-"));
+        assert!(report.get("items").is_none());
+    }
 
     #[test]
     fn visible_qq_window_is_preferred_but_tray_hidden_main_can_be_reused() {

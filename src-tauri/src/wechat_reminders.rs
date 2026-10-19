@@ -137,6 +137,20 @@ pub fn get_wechat_reminder_state() -> Result<ReminderSnapshot, String> {
         .clone())
 }
 
+pub(crate) fn diagnostic_state() -> Result<serde_json::Value, String> {
+    let state = service()?
+        .state
+        .lock()
+        .map_err(|_| "微信提醒状态不可用。")?;
+    Ok(serde_json::json!({
+        "enabled": state.snapshot.enabled,
+        "status": state.snapshot.status,
+        "pending": state.snapshot.pending,
+        "lastAttentionAt": state.snapshot.last_attention_at,
+        "error": state.snapshot.error,
+    }))
+}
+
 #[tauri::command]
 pub fn set_wechat_reminders_enabled(enabled: bool) -> Result<ReminderSnapshot, String> {
     let service = service()?;

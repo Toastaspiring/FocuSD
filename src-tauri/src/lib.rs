@@ -1,6 +1,7 @@
 mod clipboard_history;
 mod media_control;
 mod messenger_activation;
+mod notification_diagnostics;
 mod qq_notifications;
 mod qq_mail;
 mod wechat_reminder_source;
@@ -1640,6 +1641,10 @@ fn build_tray(app: &App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    if let Some(identifier) = notification_diagnostics::verification_identifier() {
+        context.config_mut().identifier = identifier;
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = show_island(app);
@@ -1679,6 +1684,9 @@ pub fn run() {
             }
             if let Err(error) = wechat_reminders::init(app.handle()) {
                 eprintln!("failed to initialize WeChat reminders: {error}");
+            }
+            if let Err(error) = notification_diagnostics::start(app.handle()) {
+                eprintln!("failed to initialize notification diagnostics: {error}");
             }
             if let Ok(window) = main_window(app.handle()) {
                 if let Err(error) = apply_stage_geometry(&window, IslandWindowState::default(), false) {
@@ -1738,6 +1746,6 @@ pub fn run() {
             translation::translate_text,
             translation::set_translation_shortcut,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running FocuSD Island");
 }

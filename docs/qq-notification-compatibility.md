@@ -46,6 +46,8 @@ powershell -NoProfile -File scripts/repair-qq-notification-registration.ps1 -Rep
 
 ## 运行诊断
 
+全新应用数据和安装包内程序的真实消息验收，见 [首次使用消息接收验收](notification-first-run-verification.md)。其中区分了本机已通过的项目、公开安装包状态和仍需全新 Windows 账户验证的条件。
+
 ### 默认开启与首次授权回归检查
 
 运行 `pnpm dev` 后，在浏览器打开 `http://127.0.0.1:1420/tests/notification-startup.html`。页面使用真实 React Hook 和 Tauri 官方 IPC mock，覆盖首次默认开启、StrictMode 去重、授权请求不重复、关闭后重启、旧偏好兼容、独立开关、拒绝/关闭授权后的处理和手动重试。检查结束恢复本次测试涉及的 localStorage 值，不读取本机消息或修改 Windows 设置。
