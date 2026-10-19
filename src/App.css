@@ -381,11 +381,6 @@ input,
   transform: scale(1);
 }
 
-.island--docked .island__collapsed {
-  /* Balance the flat top against the rounded lower edge. */
-  padding-bottom: 3px;
-}
-
 .island--expanded .island__collapsed {
   pointer-events: none;
   opacity: 0;
@@ -473,8 +468,7 @@ input,
 }
 
 .island--title-hidden .island__open-button {
-  gap: 12px;
-  padding-left: 12px;
+  padding-left: 8px;
 }
 
 .island__brand {
