@@ -1,5 +1,6 @@
 mod clipboard_history;
 mod media_control;
+mod qq_notifications;
 mod translation;
 
 use serde::{Deserialize, Serialize};
@@ -1666,6 +1667,9 @@ pub fn run() {
                 eprintln!("failed to initialize clipboard history: {error}");
             }
             translation::init(app.handle());
+            if let Err(error) = qq_notifications::init(app.handle()) {
+                eprintln!("failed to initialize QQ notifications: {error}");
+            }
             if let Ok(window) = main_window(app.handle()) {
                 if let Err(error) = apply_stage_geometry(&window, IslandWindowState::default(), false) {
                     eprintln!("failed to size and position island window: {error}");
@@ -1675,6 +1679,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            qq_notifications::get_qq_notification_state,
+            qq_notifications::set_qq_notifications_enabled,
+            qq_notifications::request_qq_notification_access,
+            qq_notifications::clear_qq_notifications,
+            qq_notifications::open_qq,
             set_island_layout,
             set_island_interaction,
             start_island_drag,

@@ -161,11 +161,13 @@ fn read_qq_notifications(listener: &UserNotificationListener) -> Result<Observat
             .and_then(|notification| notification.Visual())
             .and_then(|visual| visual.GetBinding(&KnownNotificationBindings::ToastGeneric()?))
             .and_then(|binding| binding.GetTextElements());
+        let mut parts = Vec::new();
         match text {
             Ok(elements) => {
                 for element in elements {
                     match element.Text() {
                         Ok(text) if !text.to_string_lossy().trim().is_empty() => {
+                            parts.push(text.to_string_lossy());
                             observation.readable_ids.insert(identity);
                         }
                         Ok(_) => {}
@@ -174,6 +176,22 @@ fn read_qq_notifications(listener: &UserNotificationListener) -> Result<Observat
                 }
             }
             Err(_) => observation.text_errors += 1,
+        }
+        let diagnostic = parts
+            .first()
+            .is_some_and(|title| title == "FocuSD QQ 通知诊断")
+            && parts
+                .iter()
+                .any(|body| body == "这是本机通道测试，不是聊天消息。")
+            || parts
+                .first()
+                .is_some_and(|title| title == "FocuSD QQ notification diagnostic")
+                && parts
+                    .iter()
+                    .any(|body| body == "Local channel test; this is not a chat message.");
+        if diagnostic {
+            observation.ids.remove(&identity);
+            observation.readable_ids.remove(&identity);
         }
     }
     Ok(observation)

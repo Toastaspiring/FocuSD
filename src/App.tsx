@@ -23,6 +23,7 @@ import {
   Languages,
   LocateFixed,
   Minus,
+  MessageCircle,
   NotebookPen,
   Pencil,
   Pause,
@@ -40,11 +41,16 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  QQNotificationPanel,
+  useQQNotifications,
+  type QQNotificationsController,
+} from "./QQNotifications";
 import "./App.css";
 
 export type IslandMode = "collapsed" | "expanded";
 
-type IslandPage = "todo" | "music" | "clipboard" | "layout";
+type IslandPage = "todo" | "music" | "clipboard" | "layout" | "qq";
 type TodoPageMode = "today" | "daily" | "archive" | "review";
 type ArchiveLayout = "cards" | "timeline";
 type MediaPlaybackStatus = "unavailable" | "playing" | "paused";
@@ -180,6 +186,7 @@ type IslandPreset = {
 };
 
 type IslandShellProps = {
+  qqNotifications: QQNotificationsController;
   mode: IslandMode;
   page: IslandPage;
   appearanceMode: AppearanceMode;
@@ -900,6 +907,7 @@ function createTodoId() {
 }
 
 function IslandShell({
+  qqNotifications,
   mode,
   page,
   appearanceMode,
@@ -931,6 +939,8 @@ function IslandShell({
     startY: number;
   } | null>(null);
   const isExpanded = mode === "expanded";
+  const qqPreview = qqNotifications.preview;
+  const qqNotificationCount = qqNotifications.snapshot.items.length;
   const isLiquidGlass = appearanceMode === "liquidGlass";
   const isMusicPlaying = mediaState.playbackStatus === "playing";
   const className = [
@@ -1098,33 +1108,53 @@ function IslandShell({
           <button
             className="island__open-button"
             type="button"
-            aria-label={`${collapsedLabel}，点击展开`}
-            aria-expanded={isExpanded}
-            aria-controls="island-panel"
+            aria-label={qqPreview ? `QQ 消息：${qqPreview.title}，点击打开 QQ` : `${collapsedLabel}，点击展开`}
+            aria-expanded={qqPreview ? undefined : isExpanded}
+            aria-controls={qqPreview ? undefined : "island-panel"}
             onPointerDown={prepareWindowDrag}
             onPointerMove={handleWindowDragMove}
             onPointerUp={cancelWindowDrag}
             onPointerCancel={cancelWindowDrag}
             onClick={(event) => {
               if (event.detail === 0 || !didDragRef.current) {
-                onOpenPage(page);
+                if (qqPreview) {
+                  void qqNotifications.openQQ().then((opened) => {
+                    if (opened === false) onOpenPage("qq");
+                  });
+                } else {
+                  onOpenPage(page);
+                }
               }
             }}
           >
             <span className={pulseClassName} title={agentStatusLabel} />
-            {showTitle && <span className="island__brand">fly-island</span>}
-            {activeTaskTitle ? (
-              <span className="island__active-task">
-                {showTitle ? "· " : ""}
-                {activeTaskTitle}
+            {qqPreview ? (
+              <span className="qq-preview" role="status">
+                <MessageCircle size={14} />
+                <span><strong>{qqPreview.title}</strong> · {qqPreview.body || "新消息"}</span>
               </span>
             ) : (
-              <span className="island__todo-count">
-                {showTitle ? "· " : ""}
-                剩余{pendingTodoCount}个待办
-              </span>
+              <>
+                {showTitle && <span className="island__brand">fly-island</span>}
+                {activeTaskTitle ? (
+                  <span className="island__active-task">
+                    {showTitle ? "· " : ""}
+                    {activeTaskTitle}
+                  </span>
+                ) : (
+                  <span className="island__todo-count">
+                    {showTitle ? "· " : ""}
+                    剩余{pendingTodoCount}个待办
+                  </span>
+                )}
+              </>
             )}
           </button>
+          {qqNotificationCount > 0 && (
+            <button className="qq-badge" type="button" aria-label={`QQ 消息，${qqNotificationCount} 条通知`} title="查看 QQ 通知" onClick={() => onOpenPage("qq")}>
+              <MessageCircle size={13} /><span>{qqNotificationCount}</span>
+            </button>
+          )}
           <MusicWaveButton
             isAvailable={mediaState.available || mediaState.audioActive}
             isPlaying={isMusicPlaying}
@@ -1224,6 +1254,9 @@ function IslandShell({
             />
 
             <div className="window-actions">
+              <button className="qq-badge" type="button" aria-label="QQ 消息" title={`QQ 消息${qqNotificationCount > 0 ? `（${qqNotificationCount} 条）` : ""}`} onClick={() => onOpenPage("qq")}>
+                <MessageCircle size={14} />{qqNotificationCount > 0 && <span>{qqNotificationCount}</span>}
+              </button>
               <button
                 className="icon-button"
                 type="button"
@@ -3403,6 +3436,7 @@ function ClipboardHistoryPanel({
 function App() {
   const [mode, setMode] = useState<IslandMode>("collapsed");
   const [isTucked, setIsTucked] = useState(false);
+  const qqNotifications = useQQNotifications(mode === "collapsed" && !isTucked);
   const [isPositionDetached, setIsPositionDetached] = useState(() => loadIslandPosition() !== null);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -4857,6 +4891,7 @@ function App() {
   return (
     <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
       <IslandShell
+        qqNotifications={qqNotifications}
         mode={mode}
         page={page}
         appearanceMode={settings.appearanceMode}
@@ -4879,6 +4914,7 @@ function App() {
         onReveal={revealIsland}
         onPageChange={setPage}
       >
+        {page === "qq" && <QQNotificationPanel controller={qqNotifications} />}
         {page === "layout" && (
           <LayoutEditor
             settings={settings}

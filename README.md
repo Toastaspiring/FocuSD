@@ -43,6 +43,7 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 - **Clipboard**：快速找到最近复制过的内容，减少重复查找和复制。
 - **Codex Status**：随时查看 Codex 当前任务状态，不需要频繁切回窗口确认进度。
 - **Quick Translate**：复制选中的文字后快速翻译，减少在浏览器和翻译工具之间来回跳转。
+- **QQ 消息**：读取本机 QQ 的 Windows 系统通知，在折叠岛上短暂预览，并查看最近 20 条通知。
 
 这些功能本身并不复杂，FocuSD 真正想做的是**缩短获取高频信息的路径**：需要的时候看一眼屏幕顶部，用完之后继续专注于当前的事情
 
@@ -64,6 +65,8 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 - React 19 + TypeScript：前端界面和交互
 - Rust：窗口、快捷键、剪贴板、媒体和文件等桌面能力
 - pnpm：依赖安装与项目脚本
+
+QQ 消息默认关闭。展开岛屿，点击右上角消息气泡，开启「接收 QQ 消息」并完成 Windows 授权；QQ 需要在本机登录并开启系统通知。通知内容只保留在本次运行的内存中。通知开关异常时，参见 [QQ 通知接入与修复说明](docs/qq-notification-compatibility.md)。
 
 ### 从源码构建
 
@@ -125,6 +128,7 @@ FocuSD is designed to reduce the number of window switches during work and study
 - **Clipboard**: find recently copied content quickly instead of searching for it again.
 - **Codex Status**: check the current Codex task state without switching back to Codex.
 - **Quick Translate**: copy selected text and translate it without jumping between a browser and a translation website.
+- **QQ Notifications**: briefly preview local QQ Windows notifications on the collapsed island and review the latest 20 notifications.
 
 The goal is simple: shorten the path to high-frequency information so you can look at the top of the screen and return to your work.
 
@@ -142,6 +146,8 @@ Click the preview to open the full demo, or [download the demo video](https://ra
 - React 19 + TypeScript for the interface and interactions
 - Rust for windows, shortcuts, clipboard, media, and file capabilities
 - pnpm for dependency management and project scripts
+
+QQ notifications are off by default. Expand the island, select the message bubble in the upper right, enable QQ messages, and grant Windows notification access. QQ must be signed in locally with system notifications enabled. Message content stays in memory for the current run. See the [QQ notification setup and repair guide (Chinese)](docs/qq-notification-compatibility.md) if the Windows notification switch does not stay on.
 
 ### Build from source
 
