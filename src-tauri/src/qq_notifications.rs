@@ -1,3 +1,4 @@
+use crate::messenger_activation::activate_existing_window;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
@@ -24,8 +25,8 @@ use windows::{
             WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
         },
         UI::WindowsAndMessaging::{
-            EnumWindows, GetWindow, GetWindowTextLengthW, GetWindowThreadProcessId,
-            IsWindowVisible, SetForegroundWindow, ShowWindowAsync, GW_OWNER, SW_RESTORE,
+            EnumWindows, GetClassNameW, GetWindow, GetWindowPlacement, GetWindowTextW,
+            GetWindowThreadProcessId, IsWindowVisible, GW_OWNER, WINDOWPLACEMENT,
         },
     },
     UI::Notifications::{
@@ -584,17 +585,24 @@ fn qq_executable() -> Result<PathBuf, String> {
 
 struct QQWindowSearch<'a> {
     executable: &'a Path,
-    window: Option<HWND>,
+    windows: Vec<QQWindow>,
+    running: bool,
+}
+
+struct QQWindow {
+    handle: HWND,
+    visible: bool,
+    area: i64,
+}
+
+fn preferred_qq_window(windows: &[QQWindow]) -> Option<&QQWindow> {
+    windows
+        .iter()
+        .max_by_key(|window| (window.visible, window.area))
 }
 
 unsafe extern "system" fn find_qq_window(window: HWND, context: LPARAM) -> BOOL {
     let search = &mut *(context.0 as *mut QQWindowSearch<'_>);
-    if !IsWindowVisible(window).as_bool()
-        || GetWindowTextLengthW(window) == 0
-        || GetWindow(window, GW_OWNER).is_ok_and(|owner| !owner.is_invalid())
-    {
-        return true.into();
-    }
     let mut process_id = 0;
     GetWindowThreadProcessId(window, Some(&mut process_id));
     if let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) {
@@ -606,50 +614,135 @@ unsafe extern "system" fn find_qq_window(window: HWND, context: LPARAM) -> BOOL 
             PWSTR(path.as_mut_ptr()),
             &mut length,
         );
-        let _ = CloseHandle(process);
-        if result.is_ok()
+        let matches = result.is_ok()
             && String::from_utf16_lossy(&path[..length as usize])
-                .eq_ignore_ascii_case(&search.executable.to_string_lossy())
+                .eq_ignore_ascii_case(&search.executable.to_string_lossy());
+        let _ = CloseHandle(process);
+        if !matches {
+            return true.into();
+        }
+        search.running = true;
+        let mut title = [0u16; 32];
+        let length = GetWindowTextW(window, &mut title) as usize;
+        let mut class = [0u16; 256];
+        let class_length = GetClassNameW(window, &mut class) as usize;
+        let class = String::from_utf16_lossy(&class[..class_length]);
+        let mut placement = WINDOWPLACEMENT {
+            length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+            ..Default::default()
+        };
+        if String::from_utf16_lossy(&title[..length]) != "QQ"
+            || !["Chrome_WidgetWin_1", "TXGuiFoundation"].contains(&class.as_str())
+            || GetWindow(window, GW_OWNER).is_ok_and(|owner| !owner.is_invalid())
+            || GetWindowPlacement(window, &mut placement).is_err()
         {
-            search.window = Some(window);
-            return false.into();
+            return true.into();
+        }
+        let width = placement.rcNormalPosition.right - placement.rcNormalPosition.left;
+        let height = placement.rcNormalPosition.bottom - placement.rcNormalPosition.top;
+        if width >= 500 && height >= 300 {
+            search.windows.push(QQWindow {
+                handle: window,
+                visible: IsWindowVisible(window).as_bool(),
+                area: i64::from(width) * i64::from(height),
+            });
         }
     }
     true.into()
 }
 
+fn existing_qq_windows(executable: &Path) -> Result<QQWindowSearch<'_>, String> {
+    let mut search = QQWindowSearch {
+        executable,
+        windows: Vec::new(),
+        running: false,
+    };
+    unsafe {
+        EnumWindows(
+            Some(find_qq_window),
+            LPARAM((&mut search as *mut QQWindowSearch<'_>) as isize),
+        )
+        .map_err(|error| format!("无法查找已运行的 QQ 窗口：{error}"))?;
+    }
+    Ok(search)
+}
+
+fn activate_existing_qq(executable: &Path) -> Result<(), String> {
+    let search = existing_qq_windows(executable)?;
+    if let Some(window) = preferred_qq_window(&search.windows) {
+        return activate_existing_window(window.handle, "QQ");
+    }
+    Err(if search.running {
+        "QQ 已在运行，但未找到可用的主窗口，请从系统托盘打开 QQ。"
+    } else {
+        "未找到正在运行的 QQ 窗口，请先打开并登录桌面版 QQ。"
+    }
+    .into())
+}
+
 #[tauri::command]
 pub async fn open_qq() -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let executable = qq_executable()?;
-        let mut search = QQWindowSearch {
-            executable: &executable,
-            window: None,
-        };
-        unsafe {
-            let _ = EnumWindows(
-                Some(find_qq_window),
-                LPARAM((&mut search as *mut QQWindowSearch<'_>) as isize),
-            );
-            if let Some(window) = search.window {
-                let _ = ShowWindowAsync(window, SW_RESTORE);
-                if SetForegroundWindow(window).as_bool() {
-                    return Ok(());
-                }
-            }
-        }
-        Command::new(executable)
-            .spawn()
-            .map_err(|error| format!("无法打开 QQ：{error}"))?;
-        Ok(())
-    })
-    .await
-    .map_err(|error| format!("打开 QQ 的线程失败：{error}"))?
+    tauri::async_runtime::spawn_blocking(|| activate_existing_qq(&qq_executable()?))
+        .await
+        .map_err(|error| format!("打开 QQ 的线程失败：{error}"))?
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use windows::Win32::UI::WindowsAndMessaging::IsIconic;
+
+    #[test]
+    fn visible_qq_window_is_preferred_but_tray_hidden_main_can_be_reused() {
+        let windows = [
+            QQWindow {
+                handle: HWND::default(),
+                visible: false,
+                area: 2_000_000,
+            },
+            QQWindow {
+                handle: HWND::default(),
+                visible: true,
+                area: 800_000,
+            },
+        ];
+        assert_eq!(preferred_qq_window(&windows).unwrap().area, 800_000);
+        assert_eq!(preferred_qq_window(&windows[..1]).unwrap().area, 2_000_000);
+    }
+
+    #[test]
+    #[ignore = "Restores the existing QQ window; launches no process"]
+    fn window_activation_reuses_the_existing_qq_process() {
+        let executable = qq_executable().unwrap();
+        let before = existing_qq_windows(&executable).unwrap();
+        let original = preferred_qq_window(&before.windows).expect("QQ main window is required");
+        let mut expected_process = 0;
+        unsafe {
+            GetWindowThreadProcessId(original.handle, Some(&mut expected_process));
+        }
+        assert_ne!(expected_process, 0);
+        for _ in 0..2 {
+            let result = activate_existing_qq(&executable);
+            let after = existing_qq_windows(&executable).unwrap();
+            let window = preferred_qq_window(&after.windows)
+                .expect("The existing main window must be visible");
+            let mut process_id = 0;
+            unsafe {
+                GetWindowThreadProcessId(window.handle, Some(&mut process_id));
+            }
+            assert_eq!(process_id, expected_process);
+            assert!(window.visible);
+            assert!(!unsafe { IsIconic(window.handle) }.as_bool());
+            // A background test runner may be denied focus. That must never launch another QQ.
+            if let Err(error) = result {
+                assert!(error.contains("未能切换到前台"), "{error}");
+                assert_ne!(
+                    unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() },
+                    window.handle
+                );
+            }
+        }
+    }
 
     #[test]
     fn registration_repair_only_handles_missing_sender_records() {

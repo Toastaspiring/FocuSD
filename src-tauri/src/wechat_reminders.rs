@@ -16,7 +16,7 @@ use windows::{
         },
         UI::WindowsAndMessaging::{
             EnumWindows, GetWindowPlacement, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
-            IsWindowVisible, SetForegroundWindow, ShowWindowAsync, SW_RESTORE, WINDOWPLACEMENT,
+            IsWindowVisible, WINDOWPLACEMENT,
         },
     },
 };
@@ -260,6 +260,7 @@ struct WeChatWindow {
     handle: HWND,
     started_at: u64,
     main_sized: bool,
+    visible: bool,
 }
 
 struct WindowSearch {
@@ -269,10 +270,11 @@ struct WindowSearch {
 }
 
 fn preferred_window(windows: &[WeChatWindow]) -> Option<&WeChatWindow> {
-    // Prefer the full main window over a QR-login window, then the older instance.
+    // Only full main windows qualify; prefer the visible window, then the older instance.
     windows
         .iter()
-        .min_by_key(|window| (!window.main_sized, window.started_at))
+        .filter(|window| window.main_sized)
+        .min_by_key(|window| (!window.visible, window.started_at))
 }
 
 unsafe extern "system" fn find_wechat_window(window: HWND, context: LPARAM) -> BOOL {
@@ -326,6 +328,7 @@ unsafe extern "system" fn find_wechat_window(window: HWND, context: LPARAM) -> B
         handle: window,
         started_at,
         main_sized,
+        visible: IsWindowVisible(window).as_bool(),
     });
     true.into()
 }
@@ -348,30 +351,93 @@ fn existing_wechat_windows(executable: &std::path::Path) -> Result<WindowSearch,
 
 fn activate_existing_wechat(executable: &std::path::Path) -> Result<bool, String> {
     let search = existing_wechat_windows(executable)?;
+    if !search.running {
+        return Ok(false);
+    }
+    let original = preferred_window(&search.found)
+        .ok_or("微信已在运行，但未定位到主窗口，请先从系统托盘打开并登录微信。")?;
+    let mut expected_process = 0;
     unsafe {
-        if let Some(window) = preferred_window(&search.found) {
-            let _ = ShowWindowAsync(window.handle, SW_RESTORE);
-            for _ in 0..10 {
-                if IsWindowVisible(window.handle).as_bool() && !IsIconic(window.handle).as_bool() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(50));
+        GetWindowThreadProcessId(original.handle, Some(&mut expected_process));
+    }
+    // The registered handler restores Qt's own UI state. Showing its HWND directly can leave it blank.
+    tauri_plugin_opener::open_url("weixin://", None::<&str>).map_err(|error| {
+        format!("无法通过微信注册入口唤回客户端，请从系统托盘打开微信：{error}")
+    })?;
+    for _ in 0..40 {
+        thread::sleep(Duration::from_millis(50));
+        let current = existing_wechat_windows(executable)?;
+        if let Some(window) = preferred_window(&current.found) {
+            let mut process_id = 0;
+            unsafe {
+                GetWindowThreadProcessId(window.handle, Some(&mut process_id));
             }
-            if SetForegroundWindow(window.handle).as_bool() {
+            if process_id == expected_process
+                && window.visible
+                && !unsafe { IsIconic(window.handle) }.as_bool()
+            {
                 return Ok(true);
             }
-            return Err("已找到微信窗口，但 Windows 未允许切换焦点，请点击任务栏中的微信。".into());
         }
     }
-    if search.running {
-        return Err("微信已在运行，但未定位到主窗口，请先从任务栏打开微信。".into());
-    }
-    Ok(false)
+    Err("微信未能恢复原来的主窗口，请双击系统托盘中的微信图标。".into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visible_main_is_preferred_and_login_windows_are_not_restored() {
+        let windows = [
+            WeChatWindow {
+                handle: HWND::default(),
+                started_at: 1,
+                main_sized: true,
+                visible: false,
+            },
+            WeChatWindow {
+                handle: HWND::default(),
+                started_at: 2,
+                main_sized: false,
+                visible: true,
+            },
+            WeChatWindow {
+                handle: HWND::default(),
+                started_at: 3,
+                main_sized: true,
+                visible: true,
+            },
+        ];
+        assert_eq!(preferred_window(&windows).unwrap().started_at, 3);
+        assert_eq!(preferred_window(&windows[..2]).unwrap().started_at, 1);
+        assert!(preferred_window(&windows[1..2]).is_none());
+    }
+
+    #[test]
+    #[ignore = "Activates the registered weixin protocol and verifies the original main process"]
+    fn window_activation_reuses_the_existing_wechat_process() {
+        let executable = installed_executable().unwrap();
+        let before = existing_wechat_windows(&executable).unwrap();
+        let original = preferred_window(&before.found).expect("WeChat main window is required");
+        let mut expected_process = 0;
+        unsafe {
+            GetWindowThreadProcessId(original.handle, Some(&mut expected_process));
+        }
+        assert_ne!(expected_process, 0);
+        for _ in 0..2 {
+            assert!(activate_existing_wechat(&executable).unwrap());
+            let after = existing_wechat_windows(&executable).unwrap();
+            let window =
+                preferred_window(&after.found).expect("The existing main window must be visible");
+            let mut process_id = 0;
+            unsafe {
+                GetWindowThreadProcessId(window.handle, Some(&mut process_id));
+            }
+            assert_eq!(process_id, expected_process);
+            assert!(!unsafe { IsIconic(window.handle) }.as_bool());
+        }
+    }
 
     #[test]
     fn repeated_flashes_create_one_reminder_and_activation_acknowledges_it() {
@@ -417,11 +483,13 @@ mod tests {
                 handle: HWND::default(),
                 started_at: 10,
                 main_sized: false,
+                visible: true,
             },
             WeChatWindow {
                 handle: HWND::default(),
                 started_at: 20,
                 main_sized: true,
+                visible: true,
             },
         ];
         assert_eq!(preferred_window(&windows).unwrap().started_at, 20);
@@ -434,11 +502,13 @@ mod tests {
                 handle: HWND::default(),
                 started_at: 20,
                 main_sized: true,
+                visible: true,
             },
             WeChatWindow {
                 handle: HWND::default(),
                 started_at: 10,
                 main_sized: true,
+                visible: true,
             },
         ];
         assert_eq!(preferred_window(&windows).unwrap().started_at, 10);

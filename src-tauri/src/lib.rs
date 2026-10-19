@@ -1,5 +1,6 @@
 mod clipboard_history;
 mod media_control;
+mod messenger_activation;
 mod qq_notifications;
 mod qq_mail;
 mod wechat_reminder_source;
