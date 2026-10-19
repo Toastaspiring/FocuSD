@@ -38,4 +38,4 @@ windows = { version = "0.61", features = ["ApplicationModel", "Foundation", "Fou
 windows-future = { version = "0.2", features = ["std"] }
 
 [dev-dependencies]
-windows = { version = "0.61", features = ["ApplicationModel", "UI_Notifications_Management", "Win32_System_WinRT"] }
+windows = { version = "0.61", features = ["ApplicationModel", "UI_Notifications_Management", "Win32_System_WinRT", "Win32_UI_Accessibility"] }

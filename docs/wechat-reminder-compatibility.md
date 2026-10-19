@@ -75,7 +75,27 @@ pnpm tauri build --no-bundle
 cargo test --manifest-path src-tauri/Cargo.toml --lib wechat_reminders::tests::window_activation_reuses_the_existing_wechat_process -- --ignored --exact
 ```
 
-## 参考
+## 微信正文只读探测（尚未接入应用）
+
+本机微信版本为 `4.1.9.35`。2026-10-19 的 Windows 通知快照和随后 30 秒观察均没有发现微信通知记录；这只说明本次未取得通知正文，不能证明客户端永远不会发出系统通知。
+
+辅助功能探测在微信最小化时仅取得 3 个窗口外壳控件，文本控件和列表项均为 0。需要展开微信主窗口后继续检查，当前不能据此判定展开状态下的正文可读性，也未将此通道用于正式消息接收。
+
+以下工具仅输出应用标识、控件/文字数量，不输出、落盘聊天正文或操作微信窗口。辅助功能探测限制在指定的微信进程窗口，最多检查 512 个控件和 8 层深度，并设置调用超时。
+
+```powershell
+cargo run --manifest-path src-tauri/Cargo.toml --example wechat_notification_probe -- --watch-seconds 30
+
+$wechatProcess = Get-Process -Name Weixin,WeChat -ErrorAction SilentlyContinue |
+  Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+cargo run --manifest-path src-tauri/Cargo.toml --example wechat_accessibility_probe -- --window-handle $wechatProcess.MainWindowHandle
+```
+
+通知探测退出码 `2` 表示尚未验证到含正文的微信系统通知；辅助功能探测成功退出只代表检查完成，需同时核对 `windowMinimized`、`namedListItems`、`namedTextControls` 和 `bounded`，不能把窗口外壳当作可读取的聊天内容。
+
+## 参考资料
 
 - [Microsoft：RegisterShellHookWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registershellhookwindow)
+- [Microsoft：Notification listener](https://learn.microsoft.com/en-us/windows/uwp/design/shell/tiles-and-notifications/notification-listener)
+- [Microsoft：UI Automation Clients Overview](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-clientsoverview)
 - [QQ 通知接入与修复](qq-notification-compatibility.md)
