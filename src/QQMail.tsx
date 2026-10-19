@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, LoaderCircle, Mail, RefreshCcw, Unplug } from "lucide-react";
+import { ArrowRight, ArrowUpRight, AtSign, CircleHelp, Inbox, KeyRound, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQMail.css";
 
@@ -173,12 +173,12 @@ export function useQQMail(canPreview: boolean) {
 export type QQMailController = ReturnType<typeof useQQMail>;
 
 const STATUS_LABELS: Record<MailSnapshot["status"], string> = {
-  disconnected: "连接后，每分钟检查一次新邮件",
-  connecting: "正在连接 QQ 邮箱…",
-  connected: "已连接，每分钟自动检查",
-  paused: "已暂停，恢复后继续检查新邮件",
-  authRequired: "需要重新连接 QQ 邮箱",
-  error: "同步失败，稍后自动重试",
+  disconnected: "未连接",
+  connecting: "连接中",
+  connected: "已连接",
+  paused: "已暂停",
+  authRequired: "需要重新授权",
+  error: "同步失败",
 };
 
 function formatMailTime(time: number) {
@@ -196,20 +196,18 @@ export function QQMailPanel({ controller }: { controller: QQMailController }) {
 
   return (
     <section className="qq-panel qq-mail-panel" aria-label="QQ 邮箱">
-      <header className="qq-panel__header">
-        <div><Mail size={18} /><strong>QQ 邮箱</strong>{snapshot.unreadCount !== null && <span>{snapshot.unreadCount} 封未读</span>}</div>
-        <div>
-          {snapshot.configured && <button className="icon-button" type="button" title="刷新邮件" aria-label="刷新 QQ 邮箱" disabled={busy || snapshot.syncing || !snapshot.enabled || snapshot.status === "authRequired"} onClick={() => void refresh()}><RefreshCcw size={15} className={snapshot.syncing ? "qq-mail-spinning" : undefined} /></button>}
-          {snapshot.email && <button className="icon-button" type="button" title="断开并删除保存的授权码" aria-label="断开 QQ 邮箱" onClick={() => void disconnect().then((disconnected) => { if (disconnected) setAuthorizationCode(""); })}><Unplug size={15} /></button>}
-        </div>
-      </header>
-      {snapshot.configured && !showForm && <>
+      {snapshot.configured && <header className="qq-panel__header">
         <label className="qq-panel__toggle qq-mail-account">
-          <span title={snapshot.email ?? undefined}>{snapshot.email}</span>
+          <span className="message-status" data-state={snapshot.status} role="status" aria-label={STATUS_LABELS[snapshot.status]} title={STATUS_LABELS[snapshot.status]} />
+          <span className="qq-mail-account__email" title={snapshot.email ?? undefined}>{snapshot.email}</span>
           <input type="checkbox" role="switch" aria-label="接收 QQ 邮箱" checked={snapshot.enabled} disabled={busy || snapshot.status === "authRequired"} onChange={(event) => void setEnabled(event.currentTarget.checked)} />
         </label>
-      </>}
-      {(!error || !showForm) && <p className="qq-panel__status" role="status">{snapshot.syncing ? "正在检查邮件…" : STATUS_LABELS[snapshot.status]}</p>}
+        <div className="qq-panel__toolbar">
+          <button className="icon-button" type="button" title="打开邮箱" aria-label="打开 QQ 邮箱" onClick={() => void openMail()}><ArrowUpRight size={16} strokeWidth={1.8} /></button>
+          <button className="icon-button" type="button" title={snapshot.lastSyncedAt === null ? "刷新邮件" : `刷新邮件 · 上次同步 ${formatMailTime(snapshot.lastSyncedAt)}`} aria-label="刷新 QQ 邮箱" disabled={busy || snapshot.syncing || !snapshot.enabled || snapshot.status === "authRequired"} onClick={() => void refresh()}><RefreshCw size={16} strokeWidth={1.8} className={snapshot.syncing ? "qq-mail-spinning" : undefined} /></button>
+          <button className="icon-button" type="button" title="断开并删除授权码" aria-label="断开 QQ 邮箱并删除保存的授权码" disabled={busy} onClick={() => void disconnect().then((disconnected) => { if (disconnected) setAuthorizationCode(""); })}><Unplug size={16} strokeWidth={1.8} /></button>
+        </div>
+      </header>}
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       {showForm ? (
         <form className="qq-mail-form" onSubmit={(event) => {
@@ -217,36 +215,28 @@ export function QQMailPanel({ controller }: { controller: QQMailController }) {
           void connect(email, authorizationCode).then((connected) => { if (connected) setAuthorizationCode(""); });
         }}>
           <div className="qq-mail-fields">
-            <label htmlFor="qq-mail-email">邮箱地址</label>
-            <input id="qq-mail-email" type="email" autoComplete="username" placeholder="你的邮箱@qq.com" required maxLength={80} value={email} disabled={busy || snapshot.configured} onChange={(event) => setEmail(event.currentTarget.value)} />
-            <label htmlFor="qq-mail-code">邮箱授权码</label>
-            <input id="qq-mail-code" type="password" autoComplete="off" placeholder="在 QQ 邮箱设置中生成" required maxLength={256} value={authorizationCode} disabled={busy} onChange={(event) => setAuthorizationCode(event.currentTarget.value)} />
-            {!error && <p>先在 QQ 邮箱设置中开启 IMAP，再生成授权码。授权码与 QQ 登录密码不同。</p>}
+            <label className="qq-mail-field"><AtSign size={16} strokeWidth={1.8} aria-hidden="true" /><input id="qq-mail-email" aria-label="QQ 邮箱地址" type="email" autoComplete="username" placeholder="邮箱地址@qq.com" required maxLength={80} value={email} disabled={busy || snapshot.configured} onChange={(event) => setEmail(event.currentTarget.value)} /></label>
+            <label className="qq-mail-field"><KeyRound size={16} strokeWidth={1.8} aria-hidden="true" /><input id="qq-mail-code" aria-label="QQ 邮箱授权码" type="password" autoComplete="off" placeholder="邮箱授权码" required maxLength={256} value={authorizationCode} disabled={busy} onChange={(event) => setAuthorizationCode(event.currentTarget.value)} /></label>
           </div>
           <div className="qq-mail-form__actions">
-            <button className="qq-mail-help" type="button" onClick={() => void openHelp()}>开启 IMAP / 获取授权码 <ExternalLink size={12} /></button>
-            <button className="qq-mail-connect" type="submit" disabled={busy || !email.trim() || !authorizationCode.trim()}>{busy && <LoaderCircle size={14} className="qq-mail-spinning" />}{busy ? "连接中…" : "连接邮箱"}</button>
+            <button className="icon-button" type="button" title="开启 IMAP / 获取授权码" aria-label="查看 IMAP 和邮箱授权码帮助" onClick={() => void openHelp()}><CircleHelp size={17} strokeWidth={1.8} /></button>
+            <button className="message-action qq-mail-connect" type="submit" disabled={busy || !email.trim() || !authorizationCode.trim()}>{busy ? <LoaderCircle size={15} strokeWidth={1.8} className="qq-mail-spinning" /> : <ArrowRight size={15} strokeWidth={1.8} />}{busy ? "连接中" : "连接"}</button>
           </div>
-          <small>授权码安全保存在本机 Windows 凭据管理器中</small>
         </form>
       ) : (
         <>
           <div className="qq-panel__list qq-mail-list" role="list" aria-label="收件箱最近 20 封邮件" aria-busy={snapshot.syncing}>
             {snapshot.items.length === 0 ? (
-              <div className="qq-panel__empty"><Mail size={28} /><span>{snapshot.lastSyncedAt === null ? snapshot.syncing ? "正在加载收件箱" : "尚未完成首次同步" : "收件箱暂无邮件"}</span><small>{snapshot.lastSyncedAt === null ? "首次同步只加载最近邮件，不弹出历史提醒" : "新邮件到达后会显示在这里"}</small></div>
+              <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={27} strokeWidth={1.4} className="qq-mail-spinning" /> : <Inbox size={27} strokeWidth={1.4} />}</span><span>{snapshot.syncing ? "同步中" : "暂无邮件"}</span></div>
             ) : snapshot.items.map((item) => (
               <article className={`qq-panel__item qq-mail-item${item.unread ? " qq-mail-item--unread" : ""}`} key={item.id} role="listitem">
                 <button type="button" onClick={() => void openMail()} aria-label={`打开 QQ 邮箱：${item.subject}${item.unread ? "，未读" : ""}`}>
-                  <div className="qq-panel__item-heading"><strong title={item.sender}>{item.unread && <span className="qq-mail-unread-dot" aria-hidden="true" />}{item.sender}</strong>{item.receivedAt !== null && <time dateTime={new Date(item.receivedAt).toISOString()}>{formatMailTime(item.receivedAt)}</time>}</div>
+                  <div className="qq-panel__item-heading"><strong title={item.sender}>{item.unread && <span className="qq-mail-unread-dot" aria-hidden="true" />}<span>{item.sender}</span></strong>{item.receivedAt !== null && <time dateTime={new Date(item.receivedAt).toISOString()}>{formatMailTime(item.receivedAt)}</time>}</div>
                   <p>{item.subject}</p>
                 </button>
               </article>
             ))}
           </div>
-          <footer className="qq-mail-footer">
-            <span>{snapshot.lastSyncedAt === null ? "尚未完成同步" : `上次同步 ${formatMailTime(snapshot.lastSyncedAt)}`}</span>
-            <button className="qq-mail-help" type="button" onClick={() => void openMail()}>打开邮箱 <ExternalLink size={12} /></button>
-          </footer>
         </>
       )}
     </section>

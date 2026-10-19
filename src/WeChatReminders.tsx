@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ExternalLink, MessageCircle } from "lucide-react";
+import { ArrowUpRight, MessageSquareDashed, MessagesSquare } from "lucide-react";
 import "./WeChatReminders.css";
 
 const ENABLED_KEY = "focusd-island-wechat-reminders-enabled";
@@ -122,23 +122,23 @@ export function useWeChatReminders(canPreview: boolean) {
 export type WeChatRemindersController = ReturnType<typeof useWeChatReminders>;
 
 const STATUS_LABELS: Record<ReminderSnapshot["status"], string> = {
-  disabled: "开启后，微信的新提醒会短暂显示在岛上",
-  waiting: "正在连接微信提醒…",
-  listening: "正在等待微信的任务栏提醒",
-  error: "微信提醒暂时不可用，正在重试",
+  disabled: "已暂停",
+  waiting: "连接中",
+  listening: "已连接",
+  error: "连接失败，正在重试",
 };
 
-export function WeChatReminderControls({ controller }: { controller: WeChatRemindersController }) {
+export function WeChatReminderControls({ controller, compact = false }: { controller: WeChatRemindersController; compact?: boolean }) {
   const { snapshot, busy, actionError, setEnabled } = controller;
-  return <>
-    <label className="qq-panel__toggle">
-      <span>接收微信提醒</span>
-      <input type="checkbox" role="switch" checked={snapshot.enabled} disabled={busy}
+  return <div className={`qq-panel__controls${compact ? " qq-panel__controls--compact" : ""}`}>
+    <label className="qq-panel__toggle" title={snapshot.enabled ? "暂停微信提醒" : "接收微信提醒"}>
+      {!compact && <span>微信提醒</span>}
+      <span className="message-status" data-state={snapshot.status} role="status" aria-label={STATUS_LABELS[snapshot.status]} title={STATUS_LABELS[snapshot.status]} />
+      <input type="checkbox" role="switch" aria-label="接收微信提醒" checked={snapshot.enabled} disabled={busy}
         onChange={(event) => void setEnabled(event.currentTarget.checked)} />
     </label>
-    <p className="qq-panel__status" role="status">{STATUS_LABELS[snapshot.status]}</p>
     {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
-  </>;
+  </div>;
 }
 
 export function WeChatReminderPanel({ controller }: { controller: WeChatRemindersController }) {
@@ -146,19 +146,13 @@ export function WeChatReminderPanel({ controller }: { controller: WeChatReminder
   return (
     <section className="qq-panel" aria-label="微信提醒">
       <header className="qq-panel__header">
-        <div><MessageCircle size={18} /><strong>微信提醒</strong></div>
+        <WeChatReminderControls controller={controller} compact />
+        <div className="qq-panel__toolbar"><button className="icon-button" type="button" title="打开微信" aria-label="打开微信" disabled={busy} onClick={() => void openWeChat()}><ArrowUpRight size={16} strokeWidth={1.8} /></button></div>
       </header>
-      <WeChatReminderControls controller={controller} />
-      <div className="wechat-reminder-state">
-        <MessageCircle size={30} />
-        <strong>{snapshot.pending ? "微信有新提醒" : "有提醒时，看一眼岛屿"}</strong>
-        <p>{snapshot.pending ? "打开微信后，岛上的提醒标记会消失" : "微信需在本机登录，并在后台发出任务栏提醒"}</p>
-        <button className="qq-badge wechat-open-button" type="button" disabled={busy}
-          onClick={() => void openWeChat()}>
-          打开微信 <ExternalLink size={13} />
-        </button>
+      <div className={`qq-panel__empty${snapshot.pending ? " wechat-reminder-state--pending" : ""}`} role="status">
+        <span className="message-empty-icon">{snapshot.pending ? <MessagesSquare size={27} strokeWidth={1.4} /> : <MessageSquareDashed size={27} strokeWidth={1.4} />}</span>
+        <span>{snapshot.pending ? "有新提醒" : "暂无提醒"}</span>
       </div>
-      <p className="qq-panel__footnote">仅提示有新提醒，不显示发送人、聊天正文或准确未读数</p>
     </section>
   );
 }

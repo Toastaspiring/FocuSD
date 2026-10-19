@@ -25,6 +25,7 @@ import {
   Mail,
   Minus,
   MessageCircle,
+  MessagesSquare,
   NotebookPen,
   Pencil,
   Pause,
@@ -250,7 +251,7 @@ const TODO_MAX_ESTIMATED_TITLE_LINES = 5;
 const TODO_GROW_START_ROWS = 2;
 const TODO_SCROLL_START_ROWS = 6;
 const MAX_CUSTOM_SETTING_PRESETS = 6;
-const DEFAULT_TASK_TEXT_COLOR = "#f0ff24";
+const DEFAULT_TASK_TEXT_COLOR = "#ffffff";
 const DEFAULT_CLIPBOARD_SHORTCUT = "Ctrl+X";
 const AUDIO_ACTIVE_THRESHOLD = 0.000015;
 const DEFAULT_MEDIA_STATE: MediaState = {
@@ -298,7 +299,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   pulseBrightness: 100,
   islandBackgroundColor: "#101013",
   todoBackgroundColor: "#ffffff",
-  showTitle: true,
+  showTitle: false,
   carryOverIncompleteTodos: false,
   enableTodoReorder: false,
 };
@@ -959,10 +960,9 @@ function IslandShell({
   const qqNotificationCount = qqNotifications.snapshot.items.length;
   const wechatPending = wechatReminders.snapshot.pending;
   const wechatPreviewAt = wechatReminders.previewReceivedAt;
-  const mailUnreadCount = qqMail.snapshot.enabled ? qqMail.snapshot.unreadCount ?? 0 : 0;
   const preview = latestMessagePreview([
     qqPreview ? { ...qqPreview, source: "qq", receivedAt: qqNotifications.previewReceivedAt ?? 0 } : null,
-    wechatPreviewAt !== null ? { source: "wechat", title: "微信有新提醒", body: "点击打开微信", receivedAt: wechatPreviewAt } : null,
+    wechatPreviewAt !== null ? { source: "wechat", title: "微信", body: "有新提醒", receivedAt: wechatPreviewAt } : null,
     qqMail.preview ? { source: "qqMail", title: qqMail.preview.sender, body: qqMail.preview.subject, receivedAt: qqMail.previewReceivedAt ?? 0 } : null,
   ]);
   const messageBadgeLabel = `QQ ${qqNotificationCount} 条通知${wechatPending ? "，微信有新提醒" : ""}`;
@@ -1157,7 +1157,7 @@ function IslandShell({
             <span className={pulseClassName} title={agentStatusLabel} />
             {preview ? (
               <span className="qq-preview" role="status">
-                {preview.source === "qqMail" ? <Mail size={14} /> : <MessageCircle size={14} />}
+                {preview.source === "qqMail" ? <Mail size={14} strokeWidth={1.8} /> : preview.source === "wechat" ? <MessagesSquare size={14} strokeWidth={1.8} /> : <MessageCircle size={14} strokeWidth={1.8} />}
                 <span><strong>{preview.title}</strong> · {preview.body || "新消息"}</span>
               </span>
             ) : (
@@ -1177,15 +1177,16 @@ function IslandShell({
               </>
             )}
           </button>
-          {mailUnreadCount > 0 && (
-            <button className="qq-badge qq-mail-badge" type="button" aria-label={`QQ 邮箱 ${mailUnreadCount} 封未读，查看邮件`} title={`QQ 邮箱 ${mailUnreadCount} 封未读`} onClick={() => onOpenMessages("qqMail")}>
-              <Mail size={13} /><span>{mailBadgeCount(mailUnreadCount)}</span>
+          {qqMail.preview !== null && (
+            <button className="island-message-button island-message-button--compact qq-mail-badge" type="button" aria-label="QQ 邮箱有新邮件，查看邮件" title="查看新邮件" onClick={() => onOpenMessages("qqMail")}>
+              <Mail size={15} strokeWidth={1.8} />
+              <span className="island-message-button__dot" aria-hidden="true" />
             </button>
           )}
           {(qqNotificationCount > 0 || wechatPending) && (
-            <button className="qq-badge" type="button" aria-label={messageBadgeLabel} title="查看消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
-              <MessageCircle size={13} />{qqNotificationCount > 0 && <span>{qqNotificationCount}</span>}
-              {wechatPending && <span className="wechat-reminder-dot" aria-hidden="true" />}
+            <button className="island-message-button island-message-button--compact" type="button" aria-label={messageBadgeLabel} title="查看消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
+              <MessagesSquare size={15} strokeWidth={1.8} />
+              <span className="island-message-button__dot" aria-hidden="true" />
             </button>
           )}
           <MusicWaveButton
@@ -1221,7 +1222,7 @@ function IslandShell({
                 strokeWidth={2.2}
                 aria-label={agentStatusLabel}
               />
-              <span>fly-island</span>
+              {showTitle && <span>fly-island</span>}
             </div>
 
             <div
@@ -1287,9 +1288,9 @@ function IslandShell({
             />
 
             <div className="window-actions">
-              <button className="qq-badge" type="button" aria-label={`消息：${messageBadgeLabel}`} title="消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
-                <MessageCircle size={14} />{qqNotificationCount > 0 && <span>{qqNotificationCount}</span>}
-                {wechatPending && <span className="wechat-reminder-dot" aria-hidden="true" />}
+              <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={`消息：${messageBadgeLabel}`} aria-pressed={page === "qq"} title="消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
+                <MessagesSquare size={17} strokeWidth={1.8} />
+                {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
                 className="icon-button"
@@ -1844,7 +1845,6 @@ function LayoutEditor({
         <div className="settings-section__header"><span>消息接收</span></div>
         <QQNotificationControls controller={qqNotifications} />
         <WeChatReminderControls controller={wechatReminders} />
-        <p className="qq-panel__footnote">首次默认开启，关闭后会记住选择。QQ、微信需在本机登录并发出通知或任务栏提醒。</p>
       </section>
 
       <section className="settings-section settings-section--todo">
@@ -4973,9 +4973,9 @@ function App() {
         {page === "qq" && (
           <div className="message-panel">
             <div className="message-sources" role="group" aria-label="消息来源">
-              <button type="button" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}>QQ 通知</button>
-              <button type="button" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}>微信提醒</button>
-              <button type="button" aria-pressed={messageSource === "qqMail"} onClick={() => setMessageSource("qqMail")}>QQ 邮箱{qqMail.snapshot.unreadCount !== null ? ` ${mailBadgeCount(qqMail.snapshot.unreadCount)}` : ""}</button>
+              <button type="button" aria-label="QQ 通知" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}><MessageCircle size={15} strokeWidth={1.8} /><span>QQ</span>{qqNotifications.snapshot.items.length > 0 && <span className="message-source-count">{mailBadgeCount(qqNotifications.snapshot.items.length)}</span>}</button>
+              <button type="button" aria-label="微信提醒" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}><MessagesSquare size={15} strokeWidth={1.8} /><span>微信</span>{wechatReminders.snapshot.pending && <span className="message-source-dot" aria-label="有新提醒" />}</button>
+              <button type="button" aria-label="QQ 邮箱" aria-pressed={messageSource === "qqMail"} onClick={() => setMessageSource("qqMail")}><Mail size={15} strokeWidth={1.8} /><span>邮箱</span>{qqMail.snapshot.enabled && (qqMail.snapshot.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(qqMail.snapshot.unreadCount ?? 0)}</span>}</button>
             </div>
             <div className="message-source-content">
               {messageSource === "qqMail" ? <QQMailPanel controller={qqMail} />
