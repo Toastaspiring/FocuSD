@@ -113,6 +113,13 @@ pnpm tauri build --no-bundle
 - Tauri 命令、窗口、托盘、注册表、Windows API 或桌面配置改动：必须运行 `pnpm tauri build --no-bundle`，并在行为风险需要时运行 `pnpm tauri dev` 手动验证。
 - 发布相关改动：必须运行完整的 `pnpm tauri build`。
 
+## 本机更新与桌面快捷方式
+
+- 每次完成应用更新并成功生成 release 可执行文件后，都要检查并同步当前用户桌面的岛屿快捷方式，无需再次确认；仅文档改动不需要重新构建。
+- 优先更新已有的 FocuSD / fly-island 快捷方式；不存在时创建 `fly-island.lnk`。使用 Windows 当前用户的实际桌面目录，不硬编码用户名或桌面路径。
+- 快捷方式目标应指向当前仓库的 `src-tauri/target/release/focusd-island.exe` 绝对路径，工作目录设为该程序所在目录，图标使用该可执行文件。不得指向 debug 程序、旧备份或临时构建目录。
+- 构建失败时不切换快捷方式。更新后重新读取快捷方式，确认目标文件存在、目标路径与本次成功构建产物一致，再报告完成；不要修改其他应用的快捷方式。
+
 ## Git 与协作
 
 - 修改前先查看 `git status --short`，不要覆盖用户已有改动。
