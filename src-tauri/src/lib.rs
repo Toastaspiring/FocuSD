@@ -1699,6 +1699,7 @@ pub fn run() {
             qq_notifications::get_qq_notification_state,
             qq_notifications::set_qq_notifications_enabled,
             qq_notifications::request_qq_notification_access,
+            qq_notifications::open_qq_notification_settings,
             qq_notifications::clear_qq_notifications,
             qq_notifications::open_qq,
             set_island_layout,

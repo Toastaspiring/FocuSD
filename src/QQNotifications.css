@@ -102,6 +102,18 @@
 .qq-panel__status {
   color: rgba(241, 246, 250, .65);
 }
+.qq-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 3px 8px;
+}
+.qq-panel__actions .qq-badge {
+  height: auto;
+  min-height: 28px;
+  padding: 5px 8px;
+  text-align: left;
+}
 .qq-panel__error {
   color: #ffbcaf;
 }

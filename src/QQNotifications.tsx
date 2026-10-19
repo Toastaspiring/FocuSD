@@ -6,6 +6,7 @@ import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQNotifications.css";
 
 const ENABLED_KEY = "focusd-island-qq-notifications-enabled";
+const ACCESS_REQUESTED_KEY = "focusd-island-qq-notification-access-requested";
 
 export type QQNotification = {
   id: string;
@@ -82,9 +83,14 @@ export function useQQNotifications(canPreview: boolean) {
       });
       if (cancelled) { unlisten(); return; }
       const next = await invoke<QQNotificationSnapshot>("set_qq_notifications_enabled", {
-        enabled: window.localStorage.getItem(ENABLED_KEY) === "true",
+        enabled: window.localStorage.getItem(ENABLED_KEY) !== "false",
       });
       if (!cancelled) acceptSnapshot(next);
+      if (!cancelled && next.enabled && window.localStorage.getItem(ACCESS_REQUESTED_KEY) !== "true") {
+        // Remember the attempt before invoking so a dismissed prompt never repeats on startup.
+        window.localStorage.setItem(ACCESS_REQUESTED_KEY, "true");
+        await invoke<string>("request_qq_notification_access");
+      }
     })().catch((error: unknown) => {
       if (!cancelled) setActionError(String(error));
     }).finally(() => {
@@ -121,18 +127,25 @@ export function useQQNotifications(canPreview: boolean) {
   }, []);
 
   const setEnabled = useCallback((enabled: boolean) => run(async () => {
-    if (enabled) {
-      const access = await invoke<string>("request_qq_notification_access");
-      if (access !== "allowed") {
-        throw new Error(access === "denied"
-          ? "Windows 已拒绝通知访问，请在系统设置中允许后重试。"
-          : "尚未获得通知访问权限，请重新开启并完成授权。");
-      }
-    }
     acceptSnapshot(await invoke<QQNotificationSnapshot>("set_qq_notifications_enabled", { enabled }));
     window.localStorage.setItem(ENABLED_KEY, String(enabled));
     if (!enabled) { timingRef.current = null; setPreviewWindow(null); }
+    if (enabled) {
+      window.localStorage.setItem(ACCESS_REQUESTED_KEY, "true");
+      await invoke<string>("request_qq_notification_access");
+    }
   }), [acceptSnapshot, run]);
+
+  const requestAccess = useCallback(() => run(async () => {
+    window.localStorage.setItem(ACCESS_REQUESTED_KEY, "true");
+    await invoke<string>("request_qq_notification_access");
+  }), [run]);
+
+  const openSettings = useCallback(() => run(async () => {
+    await invoke("open_qq_notification_settings", {
+      access: snapshot.status === "permissionDenied" || snapshot.status === "permissionRequired",
+    });
+  }), [run, snapshot.status]);
 
   const refresh = useCallback(() => run(async () => {
     acceptSnapshot(await invoke<QQNotificationSnapshot>("get_qq_notification_state"));
@@ -149,7 +162,7 @@ export function useQQNotifications(canPreview: boolean) {
   }), [run]);
 
   return {
-    snapshot, busy, actionError, setEnabled, refresh, clear, openQQ,
+    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openQQ,
     previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null
@@ -164,12 +177,29 @@ const STATUS_LABELS: Record<QQNotificationSnapshot["status"], string> = {
   waiting: "正在连接 Windows 通知…",
   listening: "已连接，等待新的 QQ 系统通知",
   permissionDenied: "Windows 通知访问已被拒绝，请授权后重试",
-  permissionRequired: "需要 Windows 通知访问权限，请重新开启并授权",
+  permissionRequired: "需要 Windows 通知访问权限，点击下方按钮授权",
   error: "通知连接出现问题",
 };
 
+export function QQNotificationControls({ controller }: { controller: QQNotificationsController }) {
+  const { snapshot, busy, actionError, setEnabled, requestAccess, openSettings } = controller;
+  return <>
+    <label className="qq-panel__toggle">
+      <span>接收 QQ 消息</span>
+      <input type="checkbox" role="switch" checked={snapshot.enabled} disabled={busy} onChange={(event) => void setEnabled(event.currentTarget.checked)} />
+    </label>
+    <p className="qq-panel__status" role="status">{STATUS_LABELS[snapshot.status]}</p>
+    {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
+    {snapshot.enabled && <div className="qq-panel__actions">
+      {snapshot.status === "permissionRequired" && <button className="qq-badge" type="button" disabled={busy} onClick={() => void requestAccess()}>允许通知访问</button>}
+      {(snapshot.status === "permissionDenied" || snapshot.error || actionError) && <button className="qq-badge" type="button" disabled={busy} onClick={() => void openSettings()}>打开 Windows 通知设置 <ExternalLink size={12} /></button>}
+      {snapshot.status === "error" && <button className="qq-badge" type="button" disabled={busy} onClick={() => void requestAccess()}>重试授权</button>}
+    </div>}
+  </>;
+}
+
 export function QQNotificationPanel({ controller }: { controller: QQNotificationsController }) {
-  const { snapshot, busy, actionError, setEnabled, refresh, clear, openQQ } = controller;
+  const { snapshot, busy, refresh, clear, openQQ } = controller;
   return (
     <section className="qq-panel" aria-label="QQ 最近通知">
       <header className="qq-panel__header">
@@ -179,12 +209,7 @@ export function QQNotificationPanel({ controller }: { controller: QQNotification
           <button className="icon-button" type="button" title="清空岛内通知" aria-label="清空岛内 QQ 通知" disabled={busy || snapshot.items.length === 0} onClick={() => void clear()}><Trash2 size={15} /></button>
         </div>
       </header>
-      <label className="qq-panel__toggle">
-        <span>接收 QQ 消息</span>
-        <input type="checkbox" role="switch" checked={snapshot.enabled} disabled={busy} onChange={(event) => void setEnabled(event.currentTarget.checked)} />
-      </label>
-      <p className="qq-panel__status" role="status">{STATUS_LABELS[snapshot.status]}</p>
-      {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
+      <QQNotificationControls controller={controller} />
       <div className="qq-panel__list" role="list" aria-label="最近收到的 QQ 通知">
         {snapshot.items.length === 0 ? (
           <div className="qq-panel__empty"><MessageCircle size={28} /><span>最近的消息会出现在这里</span><small>QQ 需在本机登录，并开启 Windows 通知</small></div>

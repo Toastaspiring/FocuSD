@@ -44,11 +44,13 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   QQNotificationPanel,
+  QQNotificationControls,
   useQQNotifications,
   type QQNotificationsController,
 } from "./QQNotifications";
 import {
   WeChatReminderPanel,
+  WeChatReminderControls,
   useWeChatReminders,
   type WeChatRemindersController,
 } from "./WeChatReminders";
@@ -1573,6 +1575,8 @@ function NumberControl({
 
 function LayoutEditor({
   settings,
+  qqNotifications,
+  wechatReminders,
   clipboardSettings,
   saveDirectoryDraft,
   savePathState,
@@ -1600,6 +1604,8 @@ function LayoutEditor({
   onClipboardShortcutFocusHandled,
 }: {
   settings: IslandSettings;
+  qqNotifications: QQNotificationsController;
+  wechatReminders: WeChatRemindersController;
   clipboardSettings: ClipboardHistorySettings;
   saveDirectoryDraft: string;
   savePathState: SavePathState;
@@ -1832,6 +1838,13 @@ function LayoutEditor({
           checked={settings.showTitle}
           onChange={(showTitle) => onSettingsChange({ ...settings, showTitle })}
         />
+      </section>
+
+      <section className="settings-section settings-section--messages">
+        <div className="settings-section__header"><span>消息接收</span></div>
+        <QQNotificationControls controller={qqNotifications} />
+        <WeChatReminderControls controller={wechatReminders} />
+        <p className="qq-panel__footnote">首次默认开启，关闭后会记住选择。QQ、微信需在本机登录并发出通知或任务栏提醒。</p>
       </section>
 
       <section className="settings-section settings-section--todo">
@@ -4973,6 +4986,8 @@ function App() {
         {page === "layout" && (
           <LayoutEditor
             settings={settings}
+            qqNotifications={qqNotifications}
+            wechatReminders={wechatReminders}
             clipboardSettings={clipboardHistory.settings}
             saveDirectoryDraft={saveDirectoryDraft}
             savePathState={savePathState}

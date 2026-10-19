@@ -63,7 +63,7 @@ export function useWeChatReminders(canPreview: boolean) {
       });
       if (cancelled) { unlisten(); return; }
       const next = await invoke<ReminderSnapshot>("set_wechat_reminders_enabled", {
-        enabled: window.localStorage.getItem(ENABLED_KEY) === "true",
+        enabled: window.localStorage.getItem(ENABLED_KEY) !== "false",
       });
       if (!cancelled) acceptSnapshot(next);
     })().catch((error: unknown) => {
@@ -128,22 +128,27 @@ const STATUS_LABELS: Record<ReminderSnapshot["status"], string> = {
   error: "微信提醒暂时不可用，正在重试",
 };
 
+export function WeChatReminderControls({ controller }: { controller: WeChatRemindersController }) {
+  const { snapshot, busy, actionError, setEnabled } = controller;
+  return <>
+    <label className="qq-panel__toggle">
+      <span>接收微信提醒</span>
+      <input type="checkbox" role="switch" checked={snapshot.enabled} disabled={busy}
+        onChange={(event) => void setEnabled(event.currentTarget.checked)} />
+    </label>
+    <p className="qq-panel__status" role="status">{STATUS_LABELS[snapshot.status]}</p>
+    {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
+  </>;
+}
+
 export function WeChatReminderPanel({ controller }: { controller: WeChatRemindersController }) {
-  const { snapshot, busy, actionError, setEnabled, openWeChat } = controller;
+  const { snapshot, busy, openWeChat } = controller;
   return (
     <section className="qq-panel" aria-label="微信提醒">
       <header className="qq-panel__header">
         <div><MessageCircle size={18} /><strong>微信提醒</strong></div>
       </header>
-      <label className="qq-panel__toggle">
-        <span>接收微信提醒</span>
-        <input type="checkbox" role="switch" checked={snapshot.enabled} disabled={busy}
-          onChange={(event) => void setEnabled(event.currentTarget.checked)} />
-      </label>
-      <p className="qq-panel__status" role="status">{STATUS_LABELS[snapshot.status]}</p>
-      {(actionError || snapshot.error) && (
-        <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>
-      )}
+      <WeChatReminderControls controller={controller} />
       <div className="wechat-reminder-state">
         <MessageCircle size={30} />
         <strong>{snapshot.pending ? "微信有新提醒" : "有提醒时，看一眼岛屿"}</strong>
