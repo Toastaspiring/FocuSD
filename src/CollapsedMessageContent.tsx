@@ -63,7 +63,7 @@ export function CollapsedMessageContent({
       return;
     }
     // Hidden webviews may skip animationend; never retain an old message indefinitely.
-    const timer = window.setTimeout(finish, 420);
+    const timer = window.setTimeout(finish, 720);
     return () => window.clearTimeout(timer);
   }, [moving, version]);
 

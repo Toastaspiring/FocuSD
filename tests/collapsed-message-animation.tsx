@@ -10,6 +10,11 @@ import { useQQMail, type MailSnapshot } from "../src/QQMail";
 import type { MessageSource } from "../src/messagePreview";
 
 Object.assign(globalThis, { isTauri: true, IS_REACT_ACT_ENVIRONMENT: true });
+const automated = new URLSearchParams(location.search).has("test");
+async function update(action: () => void | Promise<void>) {
+  if (automated) await act(action);
+  else await action();
+}
 const keys = ["focusd-island-qq-notifications-enabled", "focusd-island-wechat-reminders-enabled", "focusd-island-qq-notification-access-requested", "focusd-island-qq-mail-settings"];
 const originals = keys.map((key) => localStorage.getItem(key));
 keys.forEach((key) => localStorage.removeItem(key));
@@ -63,7 +68,8 @@ function Fixture() {
   changeWidth = setWidth; changeTitle = setTitle; changeFont = setPixel;
   return <div className={`stage${pixel ? " stage--font-pixel" : ""}`} style={{ "--collapsed-island-width": `${width}px` } as CSSProperties}>
     <IslandShell qqNotifications={qq} wechatReminders={wechat} qqMail={qqMail}
-      mode={mode} page="todo" isTucked={tucked} isDetached={true} showTitle={title} activeTaskTitle={task} pendingTodoCount={count}
+      mode={mode} page="todo" isTucked={tucked} isDetached={true} showTitle={title}
+      showCollapsedText={true} collapsedTaskTitle={task ?? `剩余${count}个待办`}
       appearanceMode="classic" nativeGlassState="disabled" agentVisualState="idle" agentStatusLabel="AI Agent 空闲或已完成"
       mediaState={{ available: false, audioActive: false, audioPeak: 0, playbackStatus: "unavailable", updatedAt: 0 }}
       onOpenPage={(page) => { openedPage = page; }} onOpenMessages={(source) => { openedPage = source; }}
@@ -76,7 +82,7 @@ function Fixture() {
 
 async function notify(source: MessageSource, long = false, visible = true) {
   const receivedAt = Date.now();
-  await act(async () => {
+  await update(async () => {
     if (source === "wechat") await emit("wechat-reminder-changed", {
       snapshot: { revision: ++revision, enabled: true, status: "listening", pending: true, lastAttentionAt: revision, error: null }, windowVisible: visible,
     });
@@ -123,6 +129,8 @@ async function runChecks() {
     const sender = summary().querySelector<HTMLElement>(".island-message-preview__sender")!;
     const body = summary().querySelector<HTMLElement>(".island-message-preview__body")!;
     check(sender.scrollWidth > sender.clientWidth && body.scrollWidth > body.clientWidth && body.clientWidth > 40, "280px 岛屿内长好友名与长消息分别省略");
+    const messageStyle = getComputedStyle(summary().querySelector(".island-message-preview")!);
+    check(Number.parseFloat(messageStyle.fontSize) >= 13 && Number(messageStyle.fontWeight) >= 600, "消息使用更清晰的字号和中粗字重");
     check(document.querySelector(".island")!.getBoundingClientRect().width === width, "消息不会撑宽岛屿");
     const sameRow = incoming();
     await act(async () => changeCount(2));
@@ -148,6 +156,8 @@ async function runChecks() {
     await act(async () => { changeTask("完成今日设计评审"); changeTitle(true); changeFont(true); });
     await notify("qqMail", true);
     await settle();
+    const pixelMessageStyle = getComputedStyle(summary().querySelector(".island-message-preview")!);
+    check(!pixelMessageStyle.fontFamily.includes("Fusion Pixel") && Number(pixelMessageStyle.fontWeight) >= 600, "像素主题中的消息仍使用清晰的系统中粗字体");
     await act(async () => button().click());
     await settle();
     check(incoming().textContent?.includes("fly-island") && incoming().textContent?.includes("完成今日设计评审"), "像素字体和标题开启时恢复当前专注任务");
@@ -186,10 +196,12 @@ async function runChecks() {
 }
 
 await act(async () => { createRoot(document.getElementById("fixture")!).render(<StrictMode><Fixture /></StrictMode>); });
+if (!automated) Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: false });
 for (const [label, action] of [
   ["微信消息", () => notify("wechat")], ["QQ 消息", () => notify("qq")], ["邮箱消息", () => notify("qqMail")],
-  ["长 QQ 消息", () => notify("qq", true)], ["340px", () => act(async () => changeWidth(340))],
-  ["280px", () => act(async () => changeWidth(280))], ["自动检查", runChecks],
+  ["长 QQ 消息", () => notify("qq", true)], ["340px", () => update(async () => changeWidth(340))],
+  ["像素主题", () => update(async () => changeFont(true))], ["系统主题", () => update(async () => changeFont(false))],
+  ["280px", () => update(async () => changeWidth(280))], ["自动检查", () => { location.search = "?test=1"; }],
 ] as const) {
   const control = document.createElement("button");
   control.textContent = label;
