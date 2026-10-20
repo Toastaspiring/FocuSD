@@ -144,6 +144,8 @@ export function WeChatReminderControls({ controller, compact = false }: { contro
 
 export function WeChatReminderPanel({ controller, navigation }: { controller: WeChatRemindersController; navigation: ReactNode }) {
   const { snapshot, busy, actionError, openWeChat } = controller;
+  const pending = snapshot.enabled && snapshot.status === "listening" && snapshot.pending;
+  const label = snapshot.status === "listening" ? pending ? "有新提醒" : "暂无提醒" : STATUS_LABELS[snapshot.status];
   return (
     <section className="qq-panel" aria-label="微信提醒">
       <header className="qq-panel__header">
@@ -151,9 +153,9 @@ export function WeChatReminderPanel({ controller, navigation }: { controller: We
         <div className="qq-panel__toolbar"><WeChatReminderControls controller={controller} compact /><button className="icon-button" type="button" title="打开微信" aria-label="打开微信" disabled={busy} onClick={() => void openWeChat()}><ArrowUpRight size={16} strokeWidth={1.8} /></button></div>
       </header>
       {(actionError || snapshot.error) && <p className="qq-panel__error" role="alert">{actionError || snapshot.error}</p>}
-      <div className={`qq-panel__empty${snapshot.pending ? " wechat-reminder-state--pending" : ""}`} role="status">
+      <div className={`qq-panel__empty${pending ? " wechat-reminder-state--pending" : ""}`} role="status">
         <span className="message-empty-icon"><MessageSourceIcon source="wechat" size={28} /></span>
-        <span>{snapshot.pending ? "有新提醒" : "暂无提醒"}</span>
+        <span>{label}</span>
       </div>
     </section>
   );

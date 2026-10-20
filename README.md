@@ -44,7 +44,7 @@ FocuSD 把分散在不同窗口中的高频操作放到一个可折叠、可展�
 - **音乐与系统音频**：通过 Windows 媒体会话切换上一首、播放/暂停和下一首，并用动态波形显示音频活动。
 - **AI 状态灯**：通过 Codex 和 Claude Code 生命周期钩子显示任务运行、完成或需要关注的状态，可在设置中安装或修复钩子。
 - **DeepSeek 快捷翻译**：用全局快捷键打开独立翻译窗口，自动判断中英方向或手动指定；可从剪贴板填入原文并复制译文。
-- **QQ、微信与 QQ 邮箱**：QQ 通知可在岛上预览并查看最近 20 条；微信使用任务栏提醒事件；QQ 邮箱只在新邮件到达时短暂预览，并可通过 IMAP 查看未读数和最近 20 封邮件。
+- **QQ、微信与 QQ 邮箱**：在同一行品牌导航中切换三个来源，右侧为当前来源操作；QQ 通知可在岛上预览并查看最近 20 条；微信使用任务栏提醒事件；QQ 邮箱只在新邮件到达时短暂预览，并可通过 IMAP 查看未读数和最近 20 封邮件。
 - **外观与启动设置**：切换经典或液态玻璃外观、系统或像素字体，调整大小、透明度、颜色和顶部距离；保存最多 6 个自定义样式预设、控制标题显示和开机自启动。
 
 待办、剪贴板和应用设置保存在本机。微信提醒只表示微信请求了任务栏关注，不读取聊天正文、发送人或准确未读数。QQ 通知只保留在本次运行的内存中；QQ 邮箱不下载正文或附件，也不会改变邮件已读状态。
@@ -135,7 +135,7 @@ FocuSD brings frequent actions from separate windows into one compact island:
 - **Music and system audio**: control the Windows media session with previous, play/pause, and next actions; a live waveform reflects audio activity.
 - **AI status light**: lifecycle hooks show whether Codex or Claude Code is running, complete, or needs attention. Install or repair the hooks from Settings.
 - **DeepSeek quick translation**: open a separate translation window with a global shortcut, auto-detect Chinese/English or choose a direction, paste the latest clipboard text, and copy the result.
-- **QQ, WeChat, and QQ Mail**: preview QQ Windows notifications and review the latest 20; receive WeChat taskbar-attention reminders; QQ Mail previews new arrivals and shows the mailbox unread count and latest 20 emails over IMAP.
+- **QQ, WeChat, and QQ Mail**: switch sources from one row of brand tabs, with source actions alongside them; preview QQ Windows notifications and review the latest 20; receive WeChat taskbar-attention reminders; QQ Mail previews new arrivals and shows the mailbox unread count and latest 20 emails over IMAP.
 - **Island appearance and startup**: choose classic or liquid-glass styling and system or pixel fonts; adjust size, opacity, colors, and top spacing; save up to six custom style presets, hide the island title, or enable launch at startup.
 
 Tasks, clipboard history, and app preferences stay on the device. WeChat reminders do not read chat text, sender names, or exact unread counts. QQ notifications stay in memory for the current run; QQ Mail does not download message bodies or attachments or change read status.

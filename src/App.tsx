@@ -42,21 +42,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  QQNotificationPanel,
   QQNotificationControls,
   useQQNotifications,
   type QQNotificationsController,
 } from "./QQNotifications";
 import {
-  WeChatReminderPanel,
   WeChatReminderControls,
   useWeChatReminders,
   type WeChatRemindersController,
 } from "./WeChatReminders";
-import { QQMailPanel, useQQMail, type QQMailController } from "./QQMail";
+import { useQQMail, type QQMailController } from "./QQMail";
+import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { CollapsedMessageContent } from "./CollapsedMessageContent";
-import { latestMessagePreview, mailBadgeCount, messagePreviewText, MESSAGE_SOURCE_LABELS, type MessageSource } from "./messagePreview";
+import { latestMessagePreview, messagePreviewText, MESSAGE_SOURCE_LABELS, type MessageSource } from "./messagePreview";
 import "./App.css";
 
 export type IslandMode = "collapsed" | "expanded";
@@ -243,7 +242,6 @@ const MAX_COLLAPSED_TEXT_UNITS = 12;
 const BASE_EXPANDED_ISLAND_HEIGHT = 306;
 const TODO_ARCHIVE_EXPANDED_ISLAND_HEIGHT = 352;
 const MUSIC_EXPANDED_ISLAND_HEIGHT = 286;
-const MESSAGE_EXPANDED_ISLAND_HEIGHT = 350;
 const CLIPBOARD_EXPANDED_ISLAND_HEIGHT = 430;
 const EDITOR_EXPANDED_ISLAND_HEIGHT = 430;
 const TODO_ROW_HEIGHT = 46;
@@ -3480,7 +3478,7 @@ function App() {
   const qqNotifications = useQQNotifications(mode === "collapsed" && !isTucked);
   const wechatReminders = useWeChatReminders(mode === "collapsed" && !isTucked);
   const qqMail = useQQMail(mode === "collapsed" && !isTucked);
-  const [messageSource, setMessageSource] = useState<MessageSource>("qq");
+  const [messageSource, setMessageSource] = useState<MessageView>("qq");
   const [isPositionDetached, setIsPositionDetached] = useState(() => loadIslandPosition() !== null);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -3592,7 +3590,7 @@ function App() {
         : page === "clipboard"
           ? CLIPBOARD_EXPANDED_ISLAND_HEIGHT
           : page === "qq"
-            ? MESSAGE_EXPANDED_ISLAND_HEIGHT
+            ? messagePanelHeight(messageSource)
             : EDITOR_EXPANDED_ISLAND_HEIGHT;
   const layoutSync = useRef<{
     frame: number | null;
@@ -4939,14 +4937,6 @@ function App() {
     });
   }, []);
 
-  const messageNavigation = (
-    <div className="message-sources" role="group" aria-label="消息来源">
-      <button type="button" aria-label="QQ 通知" aria-pressed={messageSource === "qq"} onClick={() => setMessageSource("qq")}><MessageSourceIcon source="qq" /><span>QQ</span>{qqNotifications.snapshot.items.length > 0 && <span className="message-source-count">{mailBadgeCount(qqNotifications.snapshot.items.length)}</span>}</button>
-      <button type="button" aria-label="微信提醒" aria-pressed={messageSource === "wechat"} onClick={() => setMessageSource("wechat")}><MessageSourceIcon source="wechat" /><span>微信</span>{wechatReminders.snapshot.pending && <span className="message-source-dot" aria-label="有新提醒" />}</button>
-      <button type="button" aria-label="QQ 邮箱" aria-pressed={messageSource === "qqMail"} onClick={() => setMessageSource("qqMail")}><MessageSourceIcon source="qqMail" /><span>邮箱</span>{qqMail.snapshot.enabled && (qqMail.snapshot.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(qqMail.snapshot.unreadCount ?? 0)}</span>}</button>
-    </div>
-  );
-
   return (
     <main className={`stage stage--font-${settings.fontFamily}`} style={stageStyle}>
       <IslandShell
@@ -4978,8 +4968,7 @@ function App() {
       >
         {page === "qq" && (
           <div className="message-panel">
-            {messageSource === "qqMail" ? <QQMailPanel controller={qqMail} navigation={messageNavigation} />
-              : messageSource === "qq" ? <QQNotificationPanel controller={qqNotifications} navigation={messageNavigation} /> : <WeChatReminderPanel controller={wechatReminders} navigation={messageNavigation} />}
+            <MessagesPanel qqMail={qqMail} qqNotifications={qqNotifications} wechatReminders={wechatReminders} source={messageSource} onSourceChange={openMessages} />
           </div>
         )}
         {page === "layout" && (
