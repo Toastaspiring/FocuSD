@@ -227,6 +227,8 @@ type IslandShellProps = {
 };
 
 const STORAGE_KEY = "focusd-island-settings";
+const COLLAPSED_TEXT_DEFAULT_MIGRATION_KEY =
+  "focusd-island-collapsed-text-default-v1";
 const SETTINGS_PRESETS_STORAGE_KEY = "focusd-island-setting-presets";
 const TODOS_STORAGE_KEY = "focusd-island-todos";
 const ACTIVE_TODO_STORAGE_KEY = "focusd-island-active-todo";
@@ -704,6 +706,7 @@ function loadSettings(): IslandSettings {
   const stored = window.localStorage.getItem(STORAGE_KEY);
 
   if (!stored) {
+    window.localStorage.setItem(COLLAPSED_TEXT_DEFAULT_MIGRATION_KEY, "1");
     return DEFAULT_SETTINGS;
   }
 
@@ -711,8 +714,18 @@ function loadSettings(): IslandSettings {
     const parsed = JSON.parse(stored) as Partial<IslandSettings> & {
       margin?: number;
     };
+    const normalized = normalizeSettings(parsed);
 
-    return normalizeSettings(parsed);
+    if (
+      window.localStorage.getItem(COLLAPSED_TEXT_DEFAULT_MIGRATION_KEY) !== "1"
+    ) {
+      const migrated = { ...normalized, showCollapsedText: true };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      window.localStorage.setItem(COLLAPSED_TEXT_DEFAULT_MIGRATION_KEY, "1");
+      return migrated;
+    }
+
+    return normalized;
   } catch {
     return DEFAULT_SETTINGS;
   }
