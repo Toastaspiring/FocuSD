@@ -183,6 +183,7 @@ type IslandSettings = {
   islandBackgroundColor: string;
   todoBackgroundColor: string;
   showTitle: boolean;
+  showCollapsedText: boolean;
   carryOverIncompleteTodos: boolean;
   enableTodoReorder: boolean;
 };
@@ -207,6 +208,7 @@ type IslandShellProps = {
   isTucked: boolean;
   isDetached: boolean;
   showTitle: boolean;
+  showCollapsedText: boolean;
   activeTaskTitle: string | null;
   pendingTodoCount: number;
   mediaState: MediaState;
@@ -299,6 +301,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   islandBackgroundColor: "#101013",
   todoBackgroundColor: "#ffffff",
   showTitle: false,
+  showCollapsedText: false,
   carryOverIncompleteTodos: false,
   enableTodoReorder: false,
 };
@@ -615,6 +618,10 @@ function normalizeSettings(
       typeof settings?.showTitle === "boolean"
         ? settings.showTitle
         : DEFAULT_SETTINGS.showTitle,
+    showCollapsedText:
+      typeof settings?.showCollapsedText === "boolean"
+        ? settings.showCollapsedText
+        : DEFAULT_SETTINGS.showCollapsedText,
     carryOverIncompleteTodos:
       typeof settings?.carryOverIncompleteTodos === "boolean"
         ? settings.carryOverIncompleteTodos
@@ -931,6 +938,7 @@ export function IslandShell({
   isTucked,
   isDetached,
   showTitle,
+  showCollapsedText,
   activeTaskTitle,
   pendingTodoCount,
   mediaState,
@@ -1157,17 +1165,21 @@ export function IslandShell({
           >
             <span className={pulseClassName} title={agentStatusLabel} />
             <CollapsedMessageContent preview={preview} enabled={!isExpanded && !isTucked}>
-              {showTitle && <span className="island__brand">fly-island</span>}
-              {activeTaskTitle ? (
-                <span className="island__active-task">
-                  {showTitle ? "· " : ""}
-                  {activeTaskTitle}
-                </span>
-              ) : (
-                <span className="island__todo-count">
-                  {showTitle ? "· " : ""}
-                  剩余{pendingTodoCount}个待办
-                </span>
+              {showCollapsedText && (
+                <>
+                  {showTitle && <span className="island__brand">fly-island</span>}
+                  {activeTaskTitle ? (
+                    <span className="island__active-task">
+                      {showTitle ? "· " : ""}
+                      {activeTaskTitle}
+                    </span>
+                  ) : (
+                    <span className="island__todo-count">
+                      {showTitle ? "· " : ""}
+                      剩余{pendingTodoCount}个待办
+                    </span>
+                  )}
+                </>
               )}
             </CollapsedMessageContent>
           </button>
@@ -1827,6 +1839,13 @@ function LayoutEditor({
           label="开机自启动"
           checked={launchAtStartup}
           onChange={onLaunchAtStartupChange}
+        />
+        <ToggleControl
+          label="显示折叠岛屿文字"
+          checked={settings.showCollapsedText}
+          onChange={(showCollapsedText) =>
+            onSettingsChange({ ...settings, showCollapsedText })
+          }
         />
         <ToggleControl
           label="显示岛屿名称"
@@ -3564,9 +3583,11 @@ function App() {
   const collapsedIslandWidth = useMemo(
     () =>
       getCollapsedIslandWidth(
-        activeTaskTitle ?? `剩余${openTodoCount}个待办`,
+        settings.showCollapsedText
+          ? activeTaskTitle ?? `剩余${openTodoCount}个待办`
+          : "",
       ),
-    [activeTaskTitle, openTodoCount],
+    [activeTaskTitle, openTodoCount, settings.showCollapsedText],
   );
   const isTodoArchivePage =
     page === "todo" && (todoPageMode === "archive" || todoPageMode === "review");
@@ -4951,6 +4972,7 @@ function App() {
         isTucked={isTucked}
         isDetached={isPositionDetached || settings.marginY > 0}
         showTitle={settings.showTitle}
+        showCollapsedText={settings.showCollapsedText}
         activeTaskTitle={activeTaskTitle}
         pendingTodoCount={openTodoCount}
         mediaState={mediaState}
