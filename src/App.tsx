@@ -301,7 +301,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   islandBackgroundColor: "#101013",
   todoBackgroundColor: "#ffffff",
   showTitle: false,
-  showCollapsedText: false,
+  showCollapsedText: true,
   carryOverIncompleteTodos: false,
   enableTodoReorder: false,
 };
