@@ -210,7 +210,6 @@ type IslandShellProps = {
   showTitle: boolean;
   showCollapsedText: boolean;
   activeTaskTitle: string | null;
-  pendingTodoCount: number;
   mediaState: MediaState;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
@@ -953,7 +952,6 @@ export function IslandShell({
   showTitle,
   showCollapsedText,
   activeTaskTitle,
-  pendingTodoCount,
   mediaState,
   agentVisualState,
   agentStatusLabel,
@@ -1178,21 +1176,14 @@ export function IslandShell({
           >
             <span className={pulseClassName} title={agentStatusLabel} />
             <CollapsedMessageContent preview={preview} enabled={!isExpanded && !isTucked}>
-              {showCollapsedText && (
-                <>
-                  {showTitle && <span className="island__brand">fly-island</span>}
-                  {activeTaskTitle ? (
-                    <span className="island__active-task">
-                      {showTitle ? "· " : ""}
-                      {activeTaskTitle}
-                    </span>
-                  ) : (
-                    <span className="island__todo-count">
-                      {showTitle ? "· " : ""}
-                      剩余{pendingTodoCount}个待办
-                    </span>
-                  )}
-                </>
+              {showCollapsedText && showTitle && (
+                <span className="island__brand">fly-island</span>
+              )}
+              {showCollapsedText && activeTaskTitle && (
+                <span className="island__active-task">
+                  {showTitle ? "· " : ""}
+                  {activeTaskTitle}
+                </span>
               )}
             </CollapsedMessageContent>
           </button>
@@ -3589,18 +3580,14 @@ function App() {
 
     return activeTodo?.title ?? null;
   }, [activeTodoId, todos]);
-  const openTodoCount = useMemo(
-    () => todos.filter((todo) => !todo.completed).length,
-    [todos],
-  );
   const collapsedIslandWidth = useMemo(
     () =>
       getCollapsedIslandWidth(
         settings.showCollapsedText
-          ? activeTaskTitle ?? `剩余${openTodoCount}个待办`
+          ? activeTaskTitle ?? (settings.showTitle ? "fly-island" : "")
           : "",
       ),
-    [activeTaskTitle, openTodoCount, settings.showCollapsedText],
+    [activeTaskTitle, settings.showCollapsedText, settings.showTitle],
   );
   const isTodoArchivePage =
     page === "todo" && (todoPageMode === "archive" || todoPageMode === "review");
@@ -4987,7 +4974,6 @@ function App() {
         showTitle={settings.showTitle}
         showCollapsedText={settings.showCollapsedText}
         activeTaskTitle={activeTaskTitle}
-        pendingTodoCount={openTodoCount}
         mediaState={mediaState}
         agentVisualState={agentVisualState}
         agentStatusLabel={agentStatusLabel}
