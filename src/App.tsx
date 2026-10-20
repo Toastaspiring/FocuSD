@@ -209,7 +209,7 @@ type IslandShellProps = {
   isDetached: boolean;
   showTitle: boolean;
   showCollapsedText: boolean;
-  activeTaskTitle: string | null;
+  collapsedTaskTitle: string | null;
   mediaState: MediaState;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
@@ -951,7 +951,7 @@ export function IslandShell({
   isDetached,
   showTitle,
   showCollapsedText,
-  activeTaskTitle,
+  collapsedTaskTitle,
   mediaState,
   agentVisualState,
   agentStatusLabel,
@@ -1007,8 +1007,8 @@ export function IslandShell({
     "island__agent-status-icon",
     `island__agent-status-icon--${agentVisualState}`,
   ].join(" ");
-  const collapsedLabel = activeTaskTitle
-    ? `正在专注：${activeTaskTitle}`
+  const collapsedLabel = collapsedTaskTitle
+    ? `待办：${collapsedTaskTitle}`
     : "fly-island";
 
   useEffect(
@@ -1179,10 +1179,10 @@ export function IslandShell({
               {showCollapsedText && showTitle && (
                 <span className="island__brand">fly-island</span>
               )}
-              {showCollapsedText && activeTaskTitle && (
+              {showCollapsedText && collapsedTaskTitle && (
                 <span className="island__active-task">
                   {showTitle ? "· " : ""}
-                  {activeTaskTitle}
+                  {collapsedTaskTitle}
                 </span>
               )}
             </CollapsedMessageContent>
@@ -3573,21 +3573,22 @@ function App() {
   const islandPositionRef = useRef<IslandPosition | null>(loadIslandPosition());
   const selectedArchive =
     archives.find((archive) => archive.date === selectedArchiveDate) ?? null;
-  const activeTaskTitle = useMemo(() => {
+  const collapsedTaskTitle = useMemo(() => {
     const activeTodo = todos.find(
       (todo) => todo.id === activeTodoId && !todo.completed,
     );
+    const nextTodo = activeTodo ?? todos.find((todo) => !todo.completed);
 
-    return activeTodo?.title ?? null;
+    return nextTodo?.title ?? null;
   }, [activeTodoId, todos]);
   const collapsedIslandWidth = useMemo(
     () =>
       getCollapsedIslandWidth(
         settings.showCollapsedText
-          ? activeTaskTitle ?? (settings.showTitle ? "fly-island" : "")
+          ? collapsedTaskTitle ?? (settings.showTitle ? "fly-island" : "")
           : "",
       ),
-    [activeTaskTitle, settings.showCollapsedText, settings.showTitle],
+    [collapsedTaskTitle, settings.showCollapsedText, settings.showTitle],
   );
   const isTodoArchivePage =
     page === "todo" && (todoPageMode === "archive" || todoPageMode === "review");
@@ -4973,7 +4974,7 @@ function App() {
         isDetached={isPositionDetached || settings.marginY > 0}
         showTitle={settings.showTitle}
         showCollapsedText={settings.showCollapsedText}
-        activeTaskTitle={activeTaskTitle}
+        collapsedTaskTitle={collapsedTaskTitle}
         mediaState={mediaState}
         agentVisualState={agentVisualState}
         agentStatusLabel={agentStatusLabel}
