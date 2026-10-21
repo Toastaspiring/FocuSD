@@ -1193,12 +1193,6 @@ export function IslandShell({
               <span className="island-message-button__dot" aria-hidden="true" />
             </button>
           )}
-          {(qqNotificationCount > 0 || wechatPending) && (
-            <button className="island-message-button island-message-button--compact" type="button" aria-label={messageBadgeLabel} title="查看消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
-              <Bell size={15} strokeWidth={1.8} />
-              <span className="island-message-button__dot" aria-hidden="true" />
-            </button>
-          )}
           <MusicWaveButton
             isAvailable={mediaState.available || mediaState.audioActive}
             isPlaying={isMusicPlaying}
