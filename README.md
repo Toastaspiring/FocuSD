@@ -40,14 +40,14 @@ FocuSD 想解决的核心问题，是工作和学习过程中频繁的窗口切�
 FocuSD 把分散在不同窗口中的高频操作放到一个可折叠、可展开的悬浮岛里：
 
 - **图文剪贴板历史**：记录复制过的文本和图片，搜索内容或备注、收藏常用项、添加备注、删除记录，并一键复制回剪贴板。历史数量、图片记录和全局唤出快捷键均可设置。
-- **QQ、微信与 QQ 邮箱**：在同一行品牌导航中切换三个来源，右侧为当前来源操作；QQ 通知可在岛上预览并查看最近 20 条；微信使用任务栏提醒事件；QQ 邮箱只在新邮件到达时短暂预览，并可通过 IMAP 查看未读数和最近 20 封邮件。
+- **QQ、微信与 QQ 邮箱**：在同一行品牌导航中切换 QQ、微信和邮箱，工具按钮共用顶部一行；QQ 通知和邮箱各保留最近 20 项，邮件支持在岛内打开正文并返回列表。
 - **快捷翻译**：用全局快捷键打开独立翻译窗口，自动判断中英方向或手动指定；可从剪贴板填入原文并复制译文。
 - **AI 状态灯**：通过 Codex 和 Claude Code 生命周期钩子显示任务运行、完成或需要关注的状态，可在设置中安装或修复钩子。
 - **待办、每日笔记与归档**：管理当天任务、标记完成、设置当前任务；记录每日笔记并浏览历史归档。可选择自动结转未完成任务，将任务和笔记保存为 Markdown。
 - **音乐与系统音频**：通过 Windows 媒体会话切换上一首、播放/暂停和下一首，并用动态波形显示音频活动。
 - **外观与启动设置**：切换经典或液态玻璃外观、系统或像素字体，调整大小、透明度、颜色和顶部距离；保存最多 6 个自定义样式预设、控制标题显示和开机自启动。
 
-待办、剪贴板和应用设置保存在本机。微信提醒只表示微信请求了任务栏关注，不读取聊天正文、发送人或准确未读数。QQ 通知只保留在本次运行的内存中；QQ 邮箱不下载正文或附件，也不会改变邮件已读状态。
+待办、剪贴板和应用设置保存在本机。微信提醒只表示微信请求了任务栏关注，不读取聊天正文、发送人或准确未读数。QQ 通知只保留在本次运行的内存中；QQ 邮箱后台仅同步邮件头，正文按需读取且只保留在内存，不下载附件、不加载远程图片，也不会改变邮件已读状态。
 
 ## 使用说明
 
@@ -135,10 +135,10 @@ FocuSD brings frequent actions from separate windows into one compact island:
 - **Music and system audio**: control the Windows media session with previous, play/pause, and next actions; a live waveform reflects audio activity.
 - **AI status light**: lifecycle hooks show whether Codex or Claude Code is running, complete, or needs attention. Install or repair the hooks from Settings.
 - **DeepSeek quick translation**: open a separate translation window with a global shortcut, auto-detect Chinese/English or choose a direction, paste the latest clipboard text, and copy the result.
-- **QQ, WeChat, and QQ Mail**: switch sources from one row of brand tabs, with source actions alongside them; preview QQ Windows notifications and review the latest 20; receive WeChat taskbar-attention reminders; QQ Mail previews new arrivals and shows the mailbox unread count and latest 20 emails over IMAP.
+- **QQ, WeChat, and QQ Mail**: switch between QQ, WeChat, and Mail from one row of brand tabs, with source actions alongside them. Review the latest 20 QQ notifications or emails, and open email bodies inside the island before returning to the list.
 - **Island appearance and startup**: choose classic or liquid-glass styling and system or pixel fonts; adjust size, opacity, colors, and top spacing; save up to six custom style presets, hide the island title, or enable launch at startup.
 
-Tasks, clipboard history, and app preferences stay on the device. WeChat reminders do not read chat text, sender names, or exact unread counts. QQ notifications stay in memory for the current run; QQ Mail does not download message bodies or attachments or change read status.
+Tasks, clipboard history, and app preferences stay on the device. WeChat reminders do not read chat text, sender names, or exact unread counts. QQ notifications stay in memory for the current run; QQ Mail syncs only headers in the background and reads bodies on demand into memory. It does not download attachments, load remote images, or change read status.
 
 ## Getting started
 

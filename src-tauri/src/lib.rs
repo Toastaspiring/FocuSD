@@ -47,6 +47,7 @@ const COLLAPSED_ISLAND_HEIGHT: f64 = 38.0;
 const COLLAPSED_RADIUS: f64 = 22.0;
 const EXPANDED_ISLAND_WIDTH: f64 = 560.0;
 const DEFAULT_EXPANDED_ISLAND_HEIGHT: f64 = 306.0;
+const MIN_EXPANDED_ISLAND_HEIGHT: f64 = 220.0;
 const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 240.0;
 const EXPANDED_RADIUS: f64 = 30.0;
 const STAGE_WINDOW_PADDING_Y: f64 = 24.0;
@@ -282,7 +283,7 @@ fn set_island_interaction(
         }
         if let Some(expanded_height) = expanded_height {
             state.expanded_height = expanded_height.clamp(
-                DEFAULT_EXPANDED_ISLAND_HEIGHT,
+                MIN_EXPANDED_ISLAND_HEIGHT,
                 DEFAULT_EXPANDED_ISLAND_HEIGHT + EXPANDED_ISLAND_HEIGHT_RANGE,
             );
         }
@@ -1531,6 +1532,27 @@ mod tests {
     }
 
     #[test]
+    fn compact_messages_and_mail_reader_keep_the_correct_cursor_boundary() {
+        for height in [MIN_EXPANDED_ISLAND_HEIGHT, 244.0, 438.0, 450.0] {
+            for scale in [0.75, 1.0, 1.4] {
+                let (width, panel_height) = IslandMode::Expanded.base_size(COLLAPSED_ISLAND_WIDTH, height);
+                let contains = |y| point_in_notch(
+                    width * scale / 2.0, y, 0.0, 0.0, width * scale, panel_height * scale,
+                    EXPANDED_RADIUS * scale, 0.0,
+                );
+                assert!(contains(panel_height * scale));
+                assert!(!contains(panel_height * scale + 1.0));
+                assert_eq!(IslandMode::Collapsed.base_size(COLLAPSED_ISLAND_WIDTH, height).1, COLLAPSED_ISLAND_HEIGHT);
+            }
+            let mut positioned = state(IslandMode::Expanded, 1.0, height);
+            positioned.custom_position = Some(IslandPosition { x: 420, y: 180 });
+            assert_eq!(resolve_stage_position(positioned, 100, 12, -48), (420, 180));
+            positioned.is_tucked = true;
+            assert_eq!(resolve_stage_position(positioned, 100, 12, -48), (420, -48));
+        }
+    }
+
+    #[test]
     fn detached_island_rounds_top_corners() {
         for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
             let mut detached = state(mode, 1.0, DEFAULT_EXPANDED_ISLAND_HEIGHT);
@@ -1701,6 +1723,7 @@ pub fn run() {
             qq_mail::connect_qq_mail,
             qq_mail::set_qq_mail_enabled,
             qq_mail::refresh_qq_mail,
+            qq_mail::read_qq_mail,
             qq_mail::disconnect_qq_mail,
             wechat_reminders::get_wechat_reminder_state,
             wechat_reminders::set_wechat_reminders_enabled,

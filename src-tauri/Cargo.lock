@@ -1260,6 +1260,7 @@ dependencies = [
  "base64 0.22.1",
  "image",
  "imap",
+ "imap-proto",
  "keyring",
  "mailparse",
  "native-tls",

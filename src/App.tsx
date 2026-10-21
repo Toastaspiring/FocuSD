@@ -1163,8 +1163,12 @@ export function IslandShell({
             onClick={(event) => {
               if (event.detail === 0 || !didDragRef.current) {
                 if (preview) {
-                  const open = preview.source === "qqMail" ? qqMail.openMail
-                    : preview.source === "qq" ? qqNotifications.openQQ : wechatReminders.openWeChat;
+                  if (preview.source === "qqMail" && qqMail.preview) {
+                    onOpenMessages("qqMail");
+                    void qqMail.readMail(qqMail.preview);
+                    return;
+                  }
+                  const open = preview.source === "qq" ? qqNotifications.openQQ : wechatReminders.openWeChat;
                   void open().then((opened) => {
                     if (opened === false) onOpenMessages(preview.source);
                   });
@@ -3606,7 +3610,7 @@ function App() {
         : page === "clipboard"
           ? CLIPBOARD_EXPANDED_ISLAND_HEIGHT
           : page === "qq"
-            ? messagePanelHeight(messageSource)
+            ? messagePanelHeight(messageSource, Boolean(qqMail.selectedMail))
             : EDITOR_EXPANDED_ISLAND_HEIGHT;
   const layoutSync = useRef<{
     frame: number | null;
@@ -3967,9 +3971,10 @@ function App() {
   }, []);
 
   const openMessages = useCallback((source: MessageSource) => {
+    qqMail.closeReader();
     setMessageSource(source);
     openIslandPage("qq");
-  }, [openIslandPage]);
+  }, [openIslandPage, qqMail.closeReader]);
 
   const openClipboardHistory = useCallback(() => {
     openIslandPage("clipboard");

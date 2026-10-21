@@ -290,7 +290,7 @@
 
 .qq-panel__item time {
   flex: 0 0 auto;
-  color: rgba(241, 246, 250, .38);
+  color: rgba(241, 246, 250, .55);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }

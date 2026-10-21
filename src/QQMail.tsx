@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowRight, ArrowUpRight, AtSign, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Unplug } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, AtSign, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Unplug } from "lucide-react";
+import DOMPurify from "dompurify";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQMail.css";
 
 const SETTINGS_KEY = "focusd-island-qq-mail-settings";
 
-type MailMessage = {
+export type MailMessage = {
   id: string;
   uid: number;
   sender: string;
@@ -17,6 +18,18 @@ type MailMessage = {
   receivedAt: number | null;
   unread: boolean;
 };
+
+export type MailContent = { id: string; content: string; contentType: "text/plain" | "text/html" };
+
+export function sanitizeMailHtml(content: string) {
+  return DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: ["p", "br", "div", "span", "h1", "h2", "h3", "h4", "strong", "b", "em", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "a", "hr"],
+    ALLOWED_ATTR: ["href", "title", "colspan", "rowspan"],
+    ALLOWED_URI_REGEXP: /^https?:\/\//i,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+  });
+}
 
 export type MailSnapshot = {
   revision: number;
@@ -51,6 +64,11 @@ export function useQQMail(canPreview: boolean) {
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(isTauri);
+  const [selectedMail, setSelectedMail] = useState<MailMessage | null>(null);
+  const [content, setContent] = useState<MailContent | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+  const readerRequestRef = useRef(0);
   const [previewWindow, setPreviewWindow] = useState<{ id: string; receivedAt: number; expiresAt: number } | null>(null);
   const canPreviewRef = useRef(canPreview);
   const revisionRef = useRef(-1);
@@ -63,6 +81,14 @@ export function useQQMail(canPreview: boolean) {
     setPreviewWindow(null);
   }, []);
 
+  const closeReader = useCallback(() => {
+    ++readerRequestRef.current;
+    setSelectedMail(null);
+    setContent(null);
+    setReadError(null);
+    setReading(false);
+  }, []);
+
   useLayoutEffect(() => {
     canPreviewRef.current = canPreview;
     if (!canPreview) clearPreview();
@@ -72,6 +98,7 @@ export function useQQMail(canPreview: boolean) {
     if (next.revision < revisionRef.current) return false;
     revisionRef.current = next.revision;
     if (next.email !== accountRef.current || !next.enabled || next.status !== "connected") clearPreview();
+    if (next.email !== accountRef.current || !next.configured || next.status === "authRequired") closeReader();
     accountRef.current = next.email;
     setSnapshot(next);
     if (next.status === "connected" && !next.syncing) setActionError(null);
@@ -85,7 +112,7 @@ export function useQQMail(canPreview: boolean) {
       } catch { setActionError("无法保存邮箱连接偏好，下次启动可能需要重新连接。"); }
     }
     return true;
-  }, [clearPreview]);
+  }, [clearPreview, closeReader]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -118,7 +145,7 @@ export function useQQMail(canPreview: boolean) {
     })().catch((error: unknown) => {
       if (!cancelled) setActionError(String(error));
     }).finally(() => { if (!cancelled) setBusy(false); });
-    return () => { cancelled = true; unlisten?.(); };
+    return () => { cancelled = true; ++readerRequestRef.current; unlisten?.(); };
   }, [acceptSnapshot, clearPreview]);
 
   useEffect(() => {
@@ -146,7 +173,33 @@ export function useQQMail(canPreview: boolean) {
   const setEnabled = useCallback((enabled: boolean) =>
     run("set_qq_mail_enabled", { email: snapshot.email, enabled }), [run, snapshot.email]);
   const refresh = useCallback(() => run("refresh_qq_mail"), [run]);
-  const disconnect = useCallback(() => run("disconnect_qq_mail"), [run]);
+  const disconnect = useCallback(() => { closeReader(); return run("disconnect_qq_mail"); }, [closeReader, run]);
+  const readMail = useCallback(async (message: MailMessage) => {
+    const requestId = ++readerRequestRef.current;
+    setSelectedMail(message);
+    setContent(null);
+    setReadError(null);
+    clearPreview();
+    if (!isTauri()) { setReadError("请在 Windows 桌面版中阅读邮件。"); setReading(false); return false; }
+    setReading(true);
+    try {
+      const next = await invoke<MailContent>("read_qq_mail", { messageId: message.id });
+      if (requestId !== readerRequestRef.current) return false;
+      if (next.id !== message.id) throw new Error("邮件内容已改变，请重试。");
+      setContent(next);
+      return true;
+    } catch (error) {
+      if (requestId === readerRequestRef.current) setReadError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      if (requestId === readerRequestRef.current) setReading(false);
+    }
+  }, [clearPreview]);
+  const openLink = useCallback(async (href: string) => {
+    if (!/^https?:\/\//i.test(href)) return;
+    try { await openUrl(href); }
+    catch { setActionError("无法打开链接，请检查默认浏览器。"); }
+  }, []);
   const openMail = useCallback(async () => {
     try {
       await openUrl("https://mail.qq.com/");
@@ -167,6 +220,7 @@ export function useQQMail(canPreview: boolean) {
 
   return {
     snapshot, busy, actionError, connect, setEnabled, refresh, disconnect, openMail, openHelp,
+    selectedMail, content, reading, readError, readMail, closeReader, openLink,
     preview, previewReceivedAt: preview ? previewWindow?.receivedAt ?? null : null,
   };
 }
@@ -186,14 +240,59 @@ function formatMailTime(time: number) {
   return new Date(time).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function QQMailPanel({ controller, navigation }: { controller: QQMailController; navigation: ReactNode }) {
+export function QQMailPanel({ controller, navigation, onRead, onBack }: {
+  controller: QQMailController;
+  navigation: ReactNode;
+  onRead?: (message: MailMessage) => void;
+  onBack?: () => void;
+}) {
   const { snapshot, busy, actionError, connect, setEnabled, refresh, disconnect, openMail, openHelp } = controller;
   const [email, setEmail] = useState(snapshot.email ?? "");
   const [authorizationCode, setAuthorizationCode] = useState("");
   const showForm = !snapshot.configured || snapshot.status === "authRequired";
   const error = actionError || snapshot.error;
+  const listRef = useRef<HTMLDivElement>(null);
+  const listScroll = useRef(0);
+  const returnFocus = useRef<string | null>(null);
+  const { selectedMail, content, reading, readError, readMail, closeReader, openLink } = controller;
+  const html = useMemo(() => content?.contentType === "text/html" ? sanitizeMailHtml(content.content) : "", [content]);
+  const readerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (snapshot.email) setEmail(snapshot.email); }, [snapshot.email]);
+  useLayoutEffect(() => {
+    if (!selectedMail && listRef.current) {
+      listRef.current.scrollTop = listScroll.current;
+      if (returnFocus.current) {
+        Array.from(listRef.current.querySelectorAll<HTMLButtonElement>("button[data-mail-id]")).find(button => button.dataset.mailId === returnFocus.current)?.focus({ preventScroll: true });
+        returnFocus.current = null;
+      }
+    }
+    if (selectedMail && readerRef.current) { returnFocus.current = selectedMail.id; readerRef.current.scrollTop = 0; readerRef.current.focus(); }
+  }, [selectedMail]);
+
+  if (selectedMail) return (
+    <section className="qq-panel qq-mail-panel" aria-label="邮件阅读">
+      <header className="qq-panel__header">
+        <button className="message-action qq-mail-back" type="button" onClick={onBack ?? closeReader}><ArrowLeft size={15} strokeWidth={1.8} />返回列表</button>
+        <button className="message-action" type="button" title="附件和回复请在网页中处理" onClick={() => void openMail()}>在网页打开<ArrowUpRight size={14} strokeWidth={1.8} /></button>
+      </header>
+      {actionError && <p className="qq-panel__error" role="alert">{actionError}</p>}
+      <div className="qq-mail-reader" ref={readerRef} tabIndex={-1} aria-label="邮件正文" aria-busy={reading}>
+        <h2 className="qq-mail-reader__subject">{selectedMail.subject}</h2>
+        <div className="qq-mail-reader__meta"><span>{selectedMail.sender}</span>{selectedMail.receivedAt !== null && <time dateTime={new Date(selectedMail.receivedAt).toISOString()}>{formatMailTime(selectedMail.receivedAt)}</time>}</div>
+        {reading ? <div className="qq-mail-reader__state" role="status"><LoaderCircle size={19} className="qq-mail-spinning" />正在加载正文</div>
+          : readError ? <div className="qq-mail-reader__state"><p className="qq-panel__error" role="alert">{readError}</p><button className="message-action" type="button" onClick={() => void readMail(selectedMail)}><RefreshCw size={14} />重试</button></div>
+          : content?.contentType === "text/html" ? <div className="qq-mail-body" onClick={(event) => {
+              const link = event.target instanceof Element ? event.target.closest("a") : null;
+              if (!link) return;
+              event.preventDefault();
+              if (link.getAttribute("href")) void openLink(link.getAttribute("href")!);
+            }} dangerouslySetInnerHTML={{ __html: html || "<p>这封邮件没有可显示的文字，请在网页中查看。</p>" }} />
+          : <div className="qq-mail-body qq-mail-body--text">{content?.content || "这封邮件没有文字正文。"}</div>}
+      </div>
+      <p className="qq-mail-reader__notice">仅预览，不自动标为已读 · 附件请在网页查看</p>
+    </section>
+  );
 
   return (
     <section className="qq-panel qq-mail-panel" aria-label="QQ 邮箱">
@@ -224,12 +323,12 @@ export function QQMailPanel({ controller, navigation }: { controller: QQMailCont
         </form>
       ) : (
         <>
-          <div className="qq-panel__list qq-mail-list" role="list" aria-label="收件箱最近 20 封邮件" aria-busy={snapshot.syncing}>
+          <div className="qq-panel__list qq-mail-list" ref={listRef} onScroll={(event) => { listScroll.current = event.currentTarget.scrollTop; }} role="list" aria-label="收件箱最近 20 封邮件" aria-busy={snapshot.syncing}>
             {snapshot.items.length === 0 ? (
               <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={26} strokeWidth={1.5} className="qq-mail-spinning" /> : <MessageSourceIcon source="qqMail" size={28} />}</span><span>{snapshot.syncing ? "同步中" : "暂无邮件"}</span></div>
             ) : snapshot.items.map((item) => (
               <article className={`qq-panel__item qq-mail-item${item.unread ? " qq-mail-item--unread" : ""}`} key={item.id} role="listitem">
-                <button type="button" onClick={() => void openMail()} aria-label={`打开 QQ 邮箱：${item.subject}${item.unread ? "，未读" : ""}`}>
+                <button type="button" data-mail-id={item.id} onClick={() => { if (onRead) onRead(item); else void readMail(item); }} aria-label={`阅读邮件：${item.subject}${item.unread ? "，未读" : ""}`}>
                   <div className="qq-panel__item-heading"><strong title={item.sender}>{item.unread && <span className="qq-mail-unread-dot" aria-hidden="true" />}<span>{item.sender}</span></strong>{item.receivedAt !== null && <time dateTime={new Date(item.receivedAt).toISOString()}>{formatMailTime(item.receivedAt)}</time>}</div>
                   <p>{item.subject}</p>
                 </button>

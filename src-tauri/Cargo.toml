@@ -22,6 +22,7 @@ arboard = "3"
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
 imap = "2.4"
+imap-proto = "0.10"
 keyring = { version = "4.2", default-features = false, features = ["v1", "windows-native-keyring-store"] }
 mailparse = "0.17"
 native-tls = "0.2"

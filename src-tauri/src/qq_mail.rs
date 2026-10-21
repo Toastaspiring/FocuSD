@@ -1,4 +1,5 @@
 use imap::{types::Flag, Session};
+use imap_proto::types::{BodyContentCommon, BodyStructure, MessageSection, SectionPath};
 use keyring::{Entry, Error as KeyringError};
 use mailparse::MailHeaderMap;
 use serde::Serialize;
@@ -18,6 +19,8 @@ const MAX_ITEMS: u32 = 20;
 const SYNC_INTERVAL: Duration = Duration::from_secs(60);
 const IO_TIMEOUT: Duration = Duration::from_secs(15);
 const HEADER_QUERY: &str = "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER]<0.65536>)";
+const MAX_BODY_BYTES: u32 = 512 * 1024;
+const MAX_MIME_BYTES: usize = 65_536;
 static SERVICE: OnceLock<Arc<MailService>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -29,6 +32,14 @@ pub struct MailMessage {
     subject: String,
     received_at: Option<i64>,
     unread: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailContent {
+    id: String,
+    content: String,
+    content_type: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -211,6 +222,12 @@ enum Work {
         generation: u64,
         reply: Reply,
     },
+    Read {
+        generation: u64,
+        email: String,
+        message_id: String,
+        reply: mpsc::Sender<Result<MailContent, String>>,
+    },
     Wake,
 }
 
@@ -323,6 +340,27 @@ impl MailService {
             }
         }
     }
+
+    fn read(&self, generation: u64, email: &str, message_id: &str) -> Result<MailContent, String> {
+        let current = || -> Result<(), String> {
+            let state = self.lock()?;
+            if state.generation != generation
+                || !state.snapshot.configured
+                || state.snapshot.email.as_deref() != Some(email)
+            {
+                return Err("邮箱连接已改变，请重新打开邮件。".into());
+            }
+            Ok(())
+        };
+        current()?;
+        let secret = read_secret(email)?.ok_or("未找到邮箱授权码，请重新连接。")?;
+        let mut session =
+            open_session(email, &secret).map_err(|failure| failure.message.to_string())?;
+        let result = fetch_content(&mut session, message_id);
+        let _ = session.logout();
+        current()?;
+        result
+    }
 }
 
 pub fn init(app: &AppHandle) -> Result<(), String> {
@@ -376,6 +414,14 @@ fn worker(service: Arc<MailService>, receiver: mpsc::Receiver<Work>) {
                     .ok_or_else(|| "请先连接 QQ 邮箱。".to_string())
                     .and_then(|email| service.sync(generation, &email, None));
                 let _ = reply.send(result);
+            }
+            Ok(Work::Read {
+                generation,
+                email,
+                message_id,
+                reply,
+            }) => {
+                let _ = reply.send(service.read(generation, &email, &message_id));
             }
             Ok(Work::Wake) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -507,6 +553,41 @@ pub async fn refresh_qq_mail() -> Result<MailSnapshot, String> {
 }
 
 #[tauri::command]
+pub async fn read_qq_mail(message_id: String) -> Result<MailContent, String> {
+    parse_message_id(&message_id)?;
+    let service = service()?;
+    let (generation, email) = {
+        let state = service.lock()?;
+        if !state.snapshot.configured || state.snapshot.status == MailStatus::AuthRequired {
+            return Err("请先连接 QQ 邮箱。".into());
+        }
+        if !state
+            .snapshot
+            .items
+            .iter()
+            .any(|item| item.id == message_id)
+        {
+            return Err("邮件已不在最近列表中，请刷新收件箱。".into());
+        }
+        (
+            state.generation,
+            state.snapshot.email.clone().ok_or("请先连接 QQ 邮箱。")?,
+        )
+    };
+    let (reply, receiver) = mpsc::channel();
+    service
+        .sender
+        .send(Work::Read {
+            generation,
+            email,
+            message_id,
+            reply,
+        })
+        .map_err(|_| "QQ 邮箱服务不可用。".to_string())?;
+    await_reply(receiver).await
+}
+
+#[tauri::command]
 pub async fn disconnect_qq_mail() -> Result<MailSnapshot, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let service = service()?;
@@ -538,9 +619,9 @@ pub async fn disconnect_qq_mail() -> Result<MailSnapshot, String> {
     .map_err(|_| "无法断开 QQ 邮箱。".to_string())?
 }
 
-async fn await_reply(
-    receiver: mpsc::Receiver<Result<MailSnapshot, String>>,
-) -> Result<MailSnapshot, String> {
+async fn await_reply<T: Send + 'static>(
+    receiver: mpsc::Receiver<Result<T, String>>,
+) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(move || {
         receiver
             .recv()
@@ -606,6 +687,16 @@ fn login_failure(error: imap::Error) -> MailFailure {
 }
 
 fn fetch_remote(email: &str, secret: &str) -> Result<Inbox, MailFailure> {
+    let mut session = open_session(email, secret)?;
+    let result = fetch_inbox(&mut session);
+    let _ = session.logout();
+    result
+}
+
+fn open_session(
+    email: &str,
+    secret: &str,
+) -> Result<Session<native_tls::TlsStream<TcpStream>>, MailFailure> {
     let mut stream = None;
     let addresses = (HOST, 993)
         .to_socket_addrs()
@@ -629,12 +720,165 @@ fn fetch_remote(email: &str, secret: &str) -> Result<Inbox, MailFailure> {
         .map_err(|_| MailFailure::network())?;
     let mut client = imap::Client::new(stream);
     client.read_greeting().map_err(|_| MailFailure::network())?;
-    let mut session = client
+    client
         .login(email, secret)
-        .map_err(|(error, _)| login_failure(error))?;
-    let result = fetch_inbox(&mut session);
-    let _ = session.logout();
-    result
+        .map_err(|(error, _)| login_failure(error))
+}
+
+fn parse_message_id(message_id: &str) -> Result<(u32, u32), String> {
+    let parsed = message_id.split_once(':').and_then(|(validity, uid)| {
+        if !validity.bytes().all(|byte| byte.is_ascii_digit())
+            || !uid.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return None;
+        }
+        Some((validity.parse::<u32>().ok()?, uid.parse::<u32>().ok()?))
+    });
+    parsed
+        .filter(|(validity, uid)| *validity > 0 && *uid > 0)
+        .ok_or_else(|| "邮件标识无效，请刷新收件箱。".into())
+}
+
+struct TextPart {
+    path: Vec<u32>,
+    mime: &'static str,
+    octets: u32,
+}
+
+fn is_attachment(common: &BodyContentCommon<'_>) -> bool {
+    common.disposition.as_ref().is_some_and(|disposition| {
+        !disposition.ty.eq_ignore_ascii_case("inline")
+            || disposition.params.as_ref().is_some_and(|params| {
+                params
+                    .iter()
+                    .any(|(key, _)| key.eq_ignore_ascii_case("filename"))
+            })
+    }) || common.ty.params.as_ref().is_some_and(|params| {
+        params
+            .iter()
+            .any(|(key, _)| key.eq_ignore_ascii_case("name"))
+    })
+}
+
+fn text_part(body: &BodyStructure<'_>, path: Vec<u32>) -> Option<TextPart> {
+    if path.len() > 16 {
+        return None;
+    }
+    match body {
+        BodyStructure::Text { common, other, .. } if !is_attachment(common) => {
+            let mime = if common.ty.subtype.eq_ignore_ascii_case("plain") {
+                "text/plain"
+            } else if common.ty.subtype.eq_ignore_ascii_case("html") {
+                "text/html"
+            } else {
+                return None;
+            };
+            Some(TextPart {
+                path: if path.is_empty() { vec![1] } else { path },
+                mime,
+                octets: other.octets,
+            })
+        }
+        BodyStructure::Multipart { common, bodies, .. } if !is_attachment(common) => {
+            let mut fallback = None;
+            for (index, body) in bodies.iter().take(128).enumerate() {
+                let mut nested = path.clone();
+                nested.push(index as u32 + 1);
+                if let Some(part) = text_part(body, nested) {
+                    if part.mime == "text/plain" {
+                        return Some(part);
+                    }
+                    if fallback.is_none() {
+                        fallback = Some(part);
+                    }
+                }
+            }
+            fallback
+        }
+        // Forwarded messages and text attachments are separate from the mail's own body.
+        _ => None,
+    }
+}
+
+fn fetch_content<T: Read + Write>(
+    session: &mut Session<T>,
+    message_id: &str,
+) -> Result<MailContent, String> {
+    let (validity, uid) = parse_message_id(message_id)?;
+    let mailbox = session
+        .examine("INBOX")
+        .map_err(|_| "无法打开收件箱，请稍后重试。")?;
+    if mailbox.uid_validity != Some(validity) {
+        return Err("收件箱已更新，请刷新列表后重新打开邮件。".into());
+    }
+    let structures = session
+        .uid_fetch(uid.to_string(), "(UID BODYSTRUCTURE)")
+        .map_err(|_| "无法读取邮件结构，请稍后重试。")?;
+    let structure = structures
+        .iter()
+        .filter(|item| item.uid == Some(uid))
+        .find_map(|item| item.bodystructure())
+        .ok_or("邮件已移除或暂不可用，请刷新收件箱。")?;
+    let part =
+        text_part(structure, Vec::new()).ok_or("这封邮件没有可读取的文字正文，请在网页中查看。")?;
+    if part.octets > MAX_BODY_BYTES {
+        return Err("邮件正文超过 512 KB，请在网页中查看。".into());
+    }
+    let section = part
+        .path
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(".");
+    let mime_path = SectionPath::Part(part.path.clone(), Some(MessageSection::Mime));
+    let body_path = SectionPath::Part(part.path, None);
+    let query = format!(
+        "(UID BODY.PEEK[{section}.MIME]<0.{}> BODY.PEEK[{section}]<0.{}>)",
+        MAX_MIME_BYTES + 1,
+        MAX_BODY_BYTES + 1
+    );
+    let messages = session
+        .uid_fetch(uid.to_string(), query)
+        .map_err(|_| "无法加载邮件正文，请检查网络并重试。")?;
+    let message = messages
+        .iter()
+        .find(|item| {
+            item.uid == Some(uid)
+                && item.section(&mime_path).is_some()
+                && item.section(&body_path).is_some()
+        })
+        .ok_or("邮件已移除，请刷新收件箱。")?;
+    let header = message
+        .section(&mime_path)
+        .ok_or("无法解析邮件格式，请在网页中查看。")?;
+    let body = message
+        .section(&body_path)
+        .ok_or("无法读取邮件正文，请重试。")?;
+    if header.len() > MAX_MIME_BYTES || body.len() > MAX_BODY_BYTES as usize {
+        return Err("邮件正文过大，请在网页中查看。".into());
+    }
+    if body.len() < part.octets as usize {
+        return Err("邮件正文未完整加载，请重试。".into());
+    }
+    let mut raw = header.to_vec();
+    if !raw.ends_with(b"\r\n\r\n") && !raw.ends_with(b"\n\n") {
+        raw.extend_from_slice(b"\r\n\r\n");
+    }
+    raw.extend_from_slice(body);
+    let parsed = mailparse::parse_mail(&raw).map_err(|_| "无法解析邮件正文，请在网页中查看。")?;
+    if !parsed.ctype.mimetype.eq_ignore_ascii_case(part.mime)
+        || parsed.get_content_disposition().disposition == mailparse::DispositionType::Attachment
+    {
+        return Err("邮件正文格式不匹配，请在网页中查看。".into());
+    }
+    let content = parsed
+        .get_body()
+        .map_err(|_| "无法解码邮件正文，请在网页中查看。")?;
+    Ok(MailContent {
+        id: message_id.into(),
+        content,
+        content_type: part.mime.into(),
+    })
 }
 
 fn fetch_inbox<T: Read + Write>(session: &mut Session<T>) -> Result<Inbox, MailFailure> {
@@ -771,7 +1015,10 @@ mod tests {
         let (sender, subject) = parse_header(b"From: =?UTF-8?B?5byg5LiJ?= <sender@example.com>\r\nSubject: =?UTF-8?B?5Lya6K6u?=\r\n\r\n");
         assert!(sender.contains("张三"));
         assert_eq!(subject, "会议");
-        assert_eq!(parse_header(b"Subject: =?GB2312?B?1tDOxA==?=\r\n\r\n").1, "中文");
+        assert_eq!(
+            parse_header(b"Subject: =?GB2312?B?1tDOxA==?=\r\n\r\n").1,
+            "中文"
+        );
         assert_eq!(parse_header(b"\r\n").1, "（无主题）");
         assert_eq!(display_header("line\r\n two", ""), "line two");
     }
@@ -905,5 +1152,125 @@ mod tests {
         let inbox = fetch_inbox(&mut session).unwrap();
         assert_eq!(inbox.unread_count, 0);
         assert!(inbox.items.is_empty());
+    }
+
+    fn body_client(
+        structure: &str,
+        path: &str,
+        mime: &str,
+        body: &str,
+    ) -> (Session<ScriptedStream>, Arc<Mutex<Vec<u8>>>) {
+        let script = format!("* OK ready\r\na1 OK login\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY 7] valid\r\na2 OK [READ-ONLY] examined\r\n* 1 FETCH (UID 9 FLAGS ())\r\n* 1 FETCH (UID 9 BODYSTRUCTURE {structure})\r\na3 OK structure\r\n* 1 FETCH (UID 9 FLAGS ())\r\n* 1 FETCH (UID 9 BODY[{path}.MIME]<0> {{{}}}\r\n{mime} BODY[{path}]<0> {{{}}}\r\n{body})\r\na4 OK body\r\n", mime.len(), body.len());
+        let (client, output) = client(script);
+        (client.login("user@qq.com", "test-secret").unwrap(), output)
+    }
+
+    #[test]
+    fn mail_ids_cannot_change_the_imap_query() {
+        assert_eq!(parse_message_id("7:9").unwrap(), (7, 9));
+        for id in [
+            "",
+            "0:9",
+            "7:0",
+            "7:*",
+            "7:1,2",
+            "7:1\r\nSTORE",
+            "7:1:2",
+            "+7:9",
+            "7:4294967296",
+        ] {
+            assert!(parse_message_id(id).is_err(), "{id:?}");
+        }
+    }
+
+    #[test]
+    fn reads_only_the_plain_body_and_never_marks_mail_read() {
+        let body = "5Lit5paH";
+        let structure = format!(
+            "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"UTF-8\") NIL NIL \"BASE64\" {} 1)",
+            body.len()
+        );
+        let (mut session, output) = body_client(
+            &structure,
+            "1",
+            "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+            body,
+        );
+        let content = fetch_content(&mut session, "7:9").unwrap();
+        assert_eq!(content.id, "7:9");
+        assert_eq!(content.content, "中文");
+        assert_eq!(content.content_type, "text/plain");
+        let commands = String::from_utf8(output.lock().unwrap().clone()).unwrap();
+        assert!(commands.contains("UID FETCH 9 (UID BODYSTRUCTURE)"));
+        assert!(commands.contains("BODY.PEEK[1.MIME]<0.65537> BODY.PEEK[1]<0.524289>"));
+        for forbidden in [" SELECT ", " STORE ", " EXPUNGE", "BODY[]", "RFC822 "] {
+            assert!(!commands.contains(forbidden), "{commands}");
+        }
+    }
+
+    #[test]
+    fn multipart_prefers_plain_text_and_skips_attachments_and_html_alternative() {
+        let body = "meeting at 3";
+        let structure = format!("(((\"TEXT\" \"HTML\" (\"CHARSET\" \"UTF-8\") NIL NIL \"8BIT\" 20 1)(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"UTF-8\") NIL NIL \"8BIT\" {} 1) \"ALTERNATIVE\")(\"APPLICATION\" \"PDF\" (\"NAME\" \"large.pdf\") NIL NIL \"BASE64\" 9999999) \"MIXED\")", body.len());
+        let (mut session, output) = body_client(
+            &structure,
+            "1.2",
+            "Content-Type: text/plain; charset=utf-8\r\n\r\n",
+            body,
+        );
+        assert_eq!(fetch_content(&mut session, "7:9").unwrap().content, body);
+        let commands = String::from_utf8(output.lock().unwrap().clone()).unwrap();
+        assert!(commands.contains("BODY.PEEK[1.2]"));
+        assert!(!commands.contains("BODY.PEEK[2]"));
+        assert!(!commands.contains("BODY.PEEK[1.1]"));
+    }
+
+    #[test]
+    fn html_only_mail_decodes_quoted_printable_chinese() {
+        let body = "<p>=D6=D0=CE=C4</p>";
+        let structure = format!(
+            "(\"TEXT\" \"HTML\" (\"CHARSET\" \"GB2312\") NIL NIL \"QUOTED-PRINTABLE\" {} 1)",
+            body.len()
+        );
+        let (mut session, _) = body_client(&structure, "1", "Content-Type: text/html; charset=GB2312\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n", body);
+        let content = fetch_content(&mut session, "7:9").unwrap();
+        assert_eq!(content.content, "<p>中文</p>");
+        assert_eq!(content.content_type, "text/html");
+    }
+
+    #[test]
+    fn a_changed_uid_validity_never_reads_a_different_message() {
+        let (client, output) = client("* OK ready\r\na1 OK login\r\n* 1 EXISTS\r\n* OK [UIDVALIDITY 8] changed\r\na2 OK examined\r\n".into());
+        let mut session = client.login("user@qq.com", "test-secret").unwrap();
+        assert!(fetch_content(&mut session, "7:9")
+            .unwrap_err()
+            .contains("刷新"));
+        assert!(!String::from_utf8(output.lock().unwrap().clone())
+            .unwrap()
+            .contains("UID FETCH"));
+    }
+
+    #[test]
+    fn oversized_bodies_and_text_attachments_are_not_downloaded() {
+        for structure in [
+            format!("(\"TEXT\" \"PLAIN\" NIL NIL NIL \"8BIT\" {} 1)", MAX_BODY_BYTES + 1),
+            "(\"TEXT\" \"PLAIN\" (\"NAME\" \"secret.txt\") NIL NIL \"8BIT\" 8 1 NIL (\"ATTACHMENT\" (\"FILENAME\" \"secret.txt\")) NIL NIL)".into(),
+        ] {
+            let (mut session, output) = body_client(&structure, "1", "", "");
+            assert!(fetch_content(&mut session, "7:9").is_err());
+            assert!(!String::from_utf8(output.lock().unwrap().clone()).unwrap().contains("BODY.PEEK"));
+        }
+    }
+
+    #[test]
+    fn incomplete_or_mismatched_mime_bodies_are_rejected() {
+        for (size, mime) in [
+            (50, "Content-Type: text/plain\r\n\r\n"),
+            (5, "Content-Type: text/html\r\n\r\n"),
+        ] {
+            let structure = format!("(\"TEXT\" \"PLAIN\" NIL NIL NIL \"8BIT\" {size} 1)");
+            let (mut session, _) = body_client(&structure, "1", mime, "hello");
+            assert!(fetch_content(&mut session, "7:9").is_err());
+        }
     }
 }
