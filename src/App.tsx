@@ -194,6 +194,7 @@ type IslandSettings = {
   todoBackgroundColor: string;
   showTitle: boolean;
   showCollapsedText: boolean;
+  showIdleTodoCount: boolean;
   carryOverIncompleteTodos: boolean;
   enableTodoReorder: boolean;
 };
@@ -220,6 +221,7 @@ type IslandShellProps = {
   showTitle: boolean;
   showCollapsedText: boolean;
   collapsedTaskTitle: string | null;
+  collapsedTodoCount: number | null;
   mediaState: MediaState;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
@@ -311,6 +313,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   todoBackgroundColor: "#ffffff",
   showTitle: false,
   showCollapsedText: true,
+  showIdleTodoCount: true,
   carryOverIncompleteTodos: false,
   enableTodoReorder: false,
 };
@@ -632,6 +635,10 @@ function normalizeSettings(
       typeof settings?.showCollapsedText === "boolean"
         ? settings.showCollapsedText
         : DEFAULT_SETTINGS.showCollapsedText,
+    showIdleTodoCount:
+      typeof settings?.showIdleTodoCount === "boolean"
+        ? settings.showIdleTodoCount
+        : DEFAULT_SETTINGS.showIdleTodoCount,
     carryOverIncompleteTodos:
       typeof settings?.carryOverIncompleteTodos === "boolean"
         ? settings.carryOverIncompleteTodos
@@ -944,6 +951,7 @@ export function IslandShell({
   showTitle,
   showCollapsedText,
   collapsedTaskTitle,
+  collapsedTodoCount,
   mediaState,
   agentVisualState,
   agentStatusLabel,
@@ -1000,8 +1008,12 @@ export function IslandShell({
     "island__agent-status-icon",
     `island__agent-status-icon--${agentVisualState}`,
   ].join(" ");
-  const collapsedLabel = collapsedTaskTitle
-    ? t.messages.collapsedTask(collapsedTaskTitle)
+  const collapsedLabel = showCollapsedText
+    ? collapsedTaskTitle
+      ? t.messages.collapsedTask(collapsedTaskTitle)
+      : collapsedTodoCount !== null
+        ? t.island.pendingTodos(collapsedTodoCount)
+        : "fly-island"
     : "fly-island";
 
   useEffect(
@@ -1180,6 +1192,12 @@ export function IslandShell({
                 <span className="island__active-task">
                   {showTitle ? "· " : ""}
                   {collapsedTaskTitle}
+                </span>
+              )}
+              {showCollapsedText && !collapsedTaskTitle && collapsedTodoCount !== null && (
+                <span className="island__todo-count">
+                  {showTitle ? "· " : ""}
+                  {t.island.pendingTodos(collapsedTodoCount)}
                 </span>
               )}
             </CollapsedMessageContent>
@@ -1888,6 +1906,13 @@ function LayoutEditor({
           checked={settings.showCollapsedText}
           onChange={(showCollapsedText) =>
             onSettingsChange({ ...settings, showCollapsedText })
+          }
+        />
+        <ToggleControl
+          label={t.settings.layout.showIdleTodoCount}
+          checked={settings.showIdleTodoCount}
+          onChange={(showIdleTodoCount) =>
+            onSettingsChange({ ...settings, showIdleTodoCount })
           }
         />
         <ToggleControl
@@ -3657,18 +3682,21 @@ function IslandApp({
     const activeTodo = todos.find(
       (todo) => todo.id === activeTodoId && !todo.completed,
     );
-    const nextTodo = activeTodo ?? todos.find((todo) => !todo.completed);
-
-    return nextTodo?.title ?? null;
+    return activeTodo?.title ?? null;
   }, [activeTodoId, todos]);
+  const collapsedTodoCount = settings.showIdleTodoCount && !collapsedTaskTitle
+    ? todos.filter((todo) => !todo.completed).length
+    : null;
   const collapsedIslandWidth = useMemo(
     () =>
       getCollapsedIslandWidth(
         settings.showCollapsedText
-          ? collapsedTaskTitle ?? (settings.showTitle ? "fly-island" : "")
+          ? collapsedTaskTitle ?? (collapsedTodoCount !== null
+            ? t.island.pendingTodos(collapsedTodoCount)
+            : settings.showTitle ? "fly-island" : "")
           : "",
       ),
-    [collapsedTaskTitle, settings.showCollapsedText, settings.showTitle],
+    [collapsedTaskTitle, collapsedTodoCount, settings.showCollapsedText, settings.showTitle, t],
   );
   const isTodoArchivePage =
     page === "todo" && (todoPageMode === "archive" || todoPageMode === "review");
@@ -5056,6 +5084,7 @@ function IslandApp({
         showTitle={settings.showTitle}
         showCollapsedText={settings.showCollapsedText}
         collapsedTaskTitle={collapsedTaskTitle}
+        collapsedTodoCount={collapsedTodoCount}
         mediaState={mediaState}
         agentVisualState={agentVisualState}
         agentStatusLabel={agentStatusLabel}

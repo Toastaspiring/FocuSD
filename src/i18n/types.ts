@@ -147,12 +147,17 @@ export type Translations = {
     auto: string;
     zhEn: string;
     enZh: string;
+    chinese: string;
+    english: string;
+    bilingual: string;
     source: string;
     limit: string;
     placeholder: string;
     paste: string;
     result: string;
     copy: string;
+    copied: string;
+    clearSource: string;
     loading: string;
     emptyResult: string;
     configureSecret: string;
@@ -315,6 +320,7 @@ export type Translations = {
       collapsedScale: string;
       expandedScale: string;
       showCollapsedText: string;
+      showIdleTodoCount: string;
       title: string;
       opacity: string;
       marginY: string;

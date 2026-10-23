@@ -1,6 +1,6 @@
 import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { ArrowRight, Check, Clipboard, Copy, Grip, Languages, Settings2, X } from "lucide-react";
+import { ArrowRight, Check, Clipboard, Copy, Grip, Languages, LoaderCircle, Settings2, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -50,6 +50,12 @@ export default function TranslationWindow() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const requestId = useRef(0);
   const clipboardRequestId = useRef(0);
+  const inputLength = Array.from(input).length;
+  const targetLanguage = settings.direction === "zh-en"
+    ? t.translator.english
+    : settings.direction === "en-zh"
+      ? t.translator.chinese
+      : t.translator.bilingual;
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => {
@@ -176,6 +182,16 @@ export default function TranslationWindow() {
     } catch (failure) { setError(String(failure)); }
   };
 
+  const clearSource = () => {
+    requestId.current += 1;
+    setInput("");
+    setOutput("");
+    setError("");
+    setDidCopy(false);
+    setIsLoading(false);
+    inputRef.current?.focus();
+  };
+
   const close = () => { requestId.current += 1; clipboardRequestId.current += 1; void invoke("hide_translation_window"); };
   const startWindowDrag = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
@@ -192,9 +208,9 @@ export default function TranslationWindow() {
     <main className="translation-stage">
       <section className="translation-window" aria-label={t.translator.label}>
         <header className="translation-window__header" onPointerDown={startWindowDrag}>
-          <span className="translation-window__mark" aria-hidden="true"><Languages size={20} /></span>
-          <div className="translation-window__heading"><h1>{t.translator.title}</h1><span>{t.translator.subtitle}</span></div>
-          <span className="translation-window__shortcut">{settings.shortcut}</span>
+          <span className="translation-window__mark" aria-hidden="true"><Languages size={18} /></span>
+          <div className="translation-window__heading"><h1>{t.translator.title}</h1></div>
+          <kbd className="translation-window__shortcut">{settings.shortcut}</kbd>
           <div className="translation-window__actions">
             <button type="button" title={t.translator.settings} aria-label={t.translator.settings} aria-pressed={showConfig} onClick={() => setShowConfig((value) => !value)}><Settings2 size={18} /></button>
             <button type="button" title={t.common.close} aria-label={t.translator.closeLabel} onClick={close}><X size={18} /></button>
@@ -229,26 +245,35 @@ export default function TranslationWindow() {
         ) : (
           <>
             <div className="translation-window__toolbar">
-              <span className="translation-window__provider"><span className="translation-window__provider-dot" />DeepSeek AI</span>
-              <label htmlFor="translation-direction">{t.translator.direction}</label>
-              <select id="translation-direction" value={settings.direction} onChange={(event) => setSettings({ ...settings, direction: event.target.value as Direction })}>
-                <option value="auto">{t.translator.auto}</option><option value="zh-en">{t.translator.zhEn}</option><option value="en-zh">{t.translator.enZh}</option>
-              </select>
+              <div className="translation-window__languages">
+                <select id="translation-direction" aria-label={t.translator.direction} value={settings.direction} disabled={isLoading} onChange={(event) => setSettings({ ...settings, direction: event.target.value as Direction })}>
+                  <option value="auto">{t.translator.auto}</option><option value="zh-en">{t.translator.chinese}</option><option value="en-zh">{t.translator.english}</option>
+                </select>
+                <ArrowRight size={15} aria-hidden="true" />
+                <span>{targetLanguage}</span>
+              </div>
+              <span className="translation-window__provider">DeepSeek AI</span>
             </div>
             <div className="translation-window__content">
               <section className="translation-window__panel translation-window__source">
-                <div className="translation-window__panel-heading"><h2>{t.translator.source}</h2><span>{t.translator.limit}</span></div>
-                <textarea id="translation-input" ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setError(""); setDidCopy(false); }} onKeyDown={handleInputKeyDown} placeholder={t.translator.placeholder} />
+                <div className="translation-window__panel-heading">
+                  <h2 id="translation-source-label">{t.translator.source}</h2>
+                  <div className="translation-window__source-actions">
+                    <span className={inputLength > 5000 ? "translation-window__error" : ""} title={t.translator.limit}>{inputLength.toLocaleString()} / 5,000</span>
+                    {input && <button type="button" className="translation-window__icon-button" onClick={clearSource} title={t.translator.clearSource} aria-label={t.translator.clearSource}><X size={14} /></button>}
+                  </div>
+                </div>
+                <textarea id="translation-input" aria-labelledby="translation-source-label" ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setError(""); setDidCopy(false); }} onKeyDown={handleInputKeyDown} placeholder={t.translator.placeholder} />
                 {!input && clipboardPreview && <button type="button" className="translation-window__clipboard" onClick={() => void pasteLatestClipboard()} title={t.translator.paste}><Clipboard size={14} /><span>{t.translator.clipboard(clipboardPreview.slice(0, 120))}</span><kbd>Tab</kbd></button>}
               </section>
-              <section className="translation-window__panel translation-window__target">
-                <div className="translation-window__panel-heading"><h2>{t.translator.result}</h2><button type="button" className="translation-window__copy" onClick={() => void copyResult()} disabled={!output} title={t.translator.copy} aria-label={t.translator.copy}>{didCopy ? <Check size={16} /> : <Copy size={16} />}</button></div>
-                <div className={`translation-window__result ${output ? "translation-window__result--filled" : ""}`} aria-live="polite">{output || (isLoading ? t.translator.loading : t.translator.emptyResult)}</div>
+              <section className="translation-window__panel translation-window__target" aria-busy={isLoading} aria-labelledby="translation-result-label">
+                <div className="translation-window__panel-heading"><h2 id="translation-result-label">{t.translator.result}</h2><button type="button" className="translation-window__copy" onClick={() => void copyResult()} disabled={!output} title={t.translator.copy} aria-label={t.translator.copy}>{didCopy ? <><Check size={14} /><span>{t.translator.copied}</span></> : <Copy size={15} />}</button></div>
+                <div className={`translation-window__result ${output ? "translation-window__result--filled" : ""}`} aria-live="polite">{output || <span className="translation-window__empty-result">{isLoading && <LoaderCircle className="translation-window__spinner" size={16} aria-hidden="true" />}{isLoading ? t.translator.loading : t.translator.emptyResult}</span>}</div>
               </section>
             </div>
             <footer className="translation-window__footer">
               <div className="translation-window__footer-info">{error ? <span className="translation-window__error" role="alert">{error}</span> : !hasSecret ? <button type="button" className="translation-window__setup" onClick={() => setShowConfig(true)}>{t.translator.configureSecret}</button> : <span>{t.translator.enterHint}</span>}</div>
-              <button type="button" className="translation-window__primary translation-window__translate" onClick={() => void submit()} disabled={isLoading}>{t.translator.translate} <ArrowRight size={16} /></button>
+              <button type="button" className="translation-window__primary translation-window__translate" onClick={() => void submit()} disabled={isLoading}>{isLoading ? t.translator.loading : t.translator.translate} {!isLoading && <ArrowRight size={15} />}</button>
             </footer>
           </>
         )}
