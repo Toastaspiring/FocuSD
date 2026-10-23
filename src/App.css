@@ -381,12 +381,14 @@ input,
   padding: 0 18px;
   opacity: 1;
   transform: scale(1);
+  transition-delay: 140ms, 0s;
 }
 
 .island--expanded .island__collapsed {
   pointer-events: none;
   opacity: 0;
   transform: translateY(-6px);
+  transition-delay: 0s;
 }
 
 .island__open-button {
