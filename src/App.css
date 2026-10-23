@@ -822,6 +822,28 @@ input,
     transform 140ms ease;
 }
 
+.icon-button--labeled {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.icon-button--labeled svg {
+  flex: 0 0 auto;
+}
+
+.icon-button.island-reset-button--available {
+  color: #c8efff;
+  background: rgba(116, 214, 255, 0.14);
+}
+
 .message-brand-icon {
   display: block;
   flex: 0 0 auto;

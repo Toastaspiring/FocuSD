@@ -176,7 +176,7 @@ const en: Translations = {
     collapseIsland: "Collapse island",
     minimizeToTray: "Minimize to tray",
     resetPosition: "Reset",
-    resetPositionLabel: "Reset island to default position",
+    resetPositionLabel: "Reset island to the top center of the primary screen",
     editor: "Island editor",
     todoList: "Tasks",
     music: "Music",

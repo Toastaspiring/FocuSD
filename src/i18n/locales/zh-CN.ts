@@ -176,7 +176,7 @@ const zhCN: Translations = {
     collapseIsland: "收起岛屿",
     minimizeToTray: "最小化到托盘",
     resetPosition: "复位",
-    resetPositionLabel: "恢复岛屿默认位置",
+    resetPositionLabel: "回到主屏顶部居中",
     editor: "岛屿编辑",
     todoList: "任务清单",
     music: "Music",

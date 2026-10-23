@@ -24,7 +24,6 @@ import {
   ImageIcon,
   Keyboard,
   Languages,
-  LocateFixed,
   Minus,
   NotebookPen,
   Pencil,
@@ -32,6 +31,7 @@ import {
   Play,
   Plus,
   RefreshCcw,
+  RotateCcw,
   Save,
   Search,
   SkipBack,
@@ -1349,7 +1349,7 @@ export function IslandShell({
                 {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
-                className="icon-button"
+                className="icon-button icon-button--labeled island-translate-button"
                 type="button"
                 title={`${t.translator.title} (Alt+C)`}
                 aria-label={t.translator.title}
@@ -1358,19 +1358,23 @@ export function IslandShell({
                   onOpenTranslator();
                 }}
               >
-                <Languages size={17} strokeWidth={2.2} />
+                <Languages size={18} strokeWidth={1.9} aria-hidden="true" />
+                <span>{t.translator.translate}</span>
               </button>
               <button
-                className="icon-button"
+                className={`icon-button icon-button--labeled island-reset-button${
+                  isDetached ? " island-reset-button--available" : ""
+                }`}
                 type="button"
-                title={t.island.resetPosition}
+                title={t.island.resetPositionLabel}
                 aria-label={t.island.resetPositionLabel}
                 onClick={(event) => {
                   event.stopPropagation();
                   onResetPosition();
                 }}
               >
-                <LocateFixed size={17} strokeWidth={2.2} />
+                <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
+                <span>{t.island.resetPosition}</span>
               </button>
               <button
                 className="icon-button"
