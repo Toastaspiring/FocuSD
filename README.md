@@ -12,7 +12,7 @@
   </p>
 
   <p>
-    <img alt="Version" src="https://img.shields.io/badge/version-0.2.5-blue">
+    <img alt="Version" src="https://img.shields.io/badge/version-0.2.6-blue">
     <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4">
     <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
     <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB">
@@ -93,8 +93,8 @@ pnpm tauri build
 
 构建完成后，安装包位于：
 
-- `src-tauri/target/release/bundle/nsis/FocuSD Island_版本号_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/FocuSD Island_版本号_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/fly-island_版本号_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/fly-island_版本号_x64_en-US.msi`
 
 也可以直接从 [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest) 下载 Windows x64 安装包。
 
@@ -184,8 +184,8 @@ pnpm tauri build
 
 The generated installers are placed in:
 
-- `src-tauri/target/release/bundle/nsis/FocuSD Island_VERSION_x64-setup.exe`
-- `src-tauri/target/release/bundle/msi/FocuSD Island_VERSION_x64_en-US.msi`
+- `src-tauri/target/release/bundle/nsis/fly-island_VERSION_x64-setup.exe`
+- `src-tauri/target/release/bundle/msi/fly-island_VERSION_x64_en-US.msi`
 
 You can also download the latest Windows x64 installers from [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest).
 
