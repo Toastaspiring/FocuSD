@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import TranslationWindow from "./TranslationWindow";
+import { I18nProvider } from "./i18n";
 
 window.addEventListener(
   "pointerdown",
@@ -23,6 +24,8 @@ window.addEventListener(
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-  {new URLSearchParams(window.location.search).get("window") === "translation" ? <TranslationWindow /> : <App />}
+    <I18nProvider>
+      {new URLSearchParams(window.location.search).get("window") === "translation" ? <TranslationWindow /> : <App />}
+    </I18nProvider>
   </React.StrictMode>,
 );

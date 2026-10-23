@@ -1,3 +1,4 @@
+import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { ArrowRight, Check, Clipboard, Copy, Grip, Languages, Settings2, X } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -32,6 +33,7 @@ function normalizeShortcut(event: KeyboardEvent<HTMLInputElement>) {
 }
 
 export default function TranslationWindow() {
+  const t = useTranslation();
   const [settings, setSettings] = useState<TranslationSettings>(loadSettings);
   const [input, setInput] = useState("");
   const [clipboardPreview, setClipboardPreview] = useState("");
@@ -72,7 +74,7 @@ export default function TranslationWindow() {
     try {
       const text = await invoke<string | null>("read_translation_clipboard");
       if (currentId !== clipboardRequestId.current) return;
-      if (!text) { setError("剪贴板中没有可粘贴的文本。"); return; }
+      if (!text) { setError(t.translator.emptyClipboard); return; }
       setClipboardPreview(text);
       setInput(text);
       setError("");
@@ -81,7 +83,7 @@ export default function TranslationWindow() {
     } catch (failure) {
       if (currentId === clipboardRequestId.current) setError(String(failure));
     }
-  }, []);
+  }, [t]);
 
   const handleOpened = useCallback(() => {
     requestId.current += 1;
@@ -123,8 +125,8 @@ export default function TranslationWindow() {
 
   const submit = useCallback(async () => {
     const text = input.trim();
-    if (!text) { setError("请输入原文，或按 Tab 填入剪贴板内容。"); return; }
-    if (Array.from(text).length > 5000) { setError("单次最多翻译 5000 个字符。"); return; }
+    if (!text) { setError(t.translator.emptySource); return; }
+    if (Array.from(text).length > 5000) { setError(t.translator.tooLong); return; }
     const currentId = ++requestId.current;
     setError("");
     setOutput("");
@@ -137,7 +139,7 @@ export default function TranslationWindow() {
     } finally {
       if (currentId === requestId.current) setIsLoading(false);
     }
-  }, [input, settings.direction]);
+  }, [input, settings.direction, t]);
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -188,29 +190,29 @@ export default function TranslationWindow() {
 
   return (
     <main className="translation-stage">
-      <section className="translation-window" aria-label="DeepSeek 快捷翻译">
+      <section className="translation-window" aria-label={t.translator.label}>
         <header className="translation-window__header" onPointerDown={startWindowDrag}>
           <span className="translation-window__mark" aria-hidden="true"><Languages size={20} /></span>
-          <div className="translation-window__heading"><h1>快捷翻译</h1><span>由 DeepSeek 提供 · 中英互译</span></div>
+          <div className="translation-window__heading"><h1>{t.translator.title}</h1><span>{t.translator.subtitle}</span></div>
           <span className="translation-window__shortcut">{settings.shortcut}</span>
           <div className="translation-window__actions">
-            <button type="button" title="翻译设置" aria-label="翻译设置" aria-pressed={showConfig} onClick={() => setShowConfig((value) => !value)}><Settings2 size={18} /></button>
-            <button type="button" title="关闭" aria-label="关闭翻译窗口" onClick={close}><X size={18} /></button>
+            <button type="button" title={t.translator.settings} aria-label={t.translator.settings} aria-pressed={showConfig} onClick={() => setShowConfig((value) => !value)}><Settings2 size={18} /></button>
+            <button type="button" title={t.common.close} aria-label={t.translator.closeLabel} onClick={close}><X size={18} /></button>
           </div>
         </header>
 
         {showConfig ? (
           <section className="translation-window__config">
-            <div className="translation-window__section-heading"><h2>翻译设置</h2><p>密钥只保存在本机 Windows 凭据管理器</p></div>
-            <label className="translation-window__field"><span>DeepSeek API 密钥 {hasSecret && <em>已保存</em>}</span>
-              <input type="password" autoComplete="off" value={secretDraft} onChange={(event) => setSecretDraft(event.target.value)} placeholder={hasSecret ? "输入新密钥以替换" : "输入 DeepSeek API 密钥"} />
+            <div className="translation-window__section-heading"><h2>{t.translator.settings}</h2><p>{t.translator.credentialHint}</p></div>
+            <label className="translation-window__field"><span>{t.translator.secret} {hasSecret && <em>{t.common.saved}</em>}</span>
+              <input type="password" autoComplete="off" value={secretDraft} onChange={(event) => setSecretDraft(event.target.value)} placeholder={hasSecret ? t.translator.replaceSecret : t.translator.enterSecret} />
             </label>
             <div className="translation-window__config-actions">
-              <button type="button" className="translation-window__primary" onClick={() => void saveSecret()} disabled={!secretDraft.trim() || savingSecret}>保存密钥</button>
-              {hasSecret && <button type="button" className="translation-window__secondary" onClick={() => void removeSecret()}>删除已保存密钥</button>}
+              <button type="button" className="translation-window__primary" onClick={() => void saveSecret()} disabled={!secretDraft.trim() || savingSecret}>{t.translator.saveSecret}</button>
+              {hasSecret && <button type="button" className="translation-window__secondary" onClick={() => void removeSecret()}>{t.translator.deleteSecret}</button>}
             </div>
-            <label className="translation-window__field"><span>全局快捷键</span>
-              <input readOnly value={recordingShortcut ? "请按下组合键…" : settings.shortcut} onFocus={() => setRecordingShortcut(true)} onBlur={() => setRecordingShortcut(false)} onKeyDown={(event) => {
+            <label className="translation-window__field"><span>{t.translator.shortcut}</span>
+              <input readOnly value={recordingShortcut ? t.translator.pressShortcut : settings.shortcut} onFocus={() => setRecordingShortcut(true)} onBlur={() => setRecordingShortcut(false)} onKeyDown={(event) => {
                 event.preventDefault();
                 if (event.key === "Escape") { setRecordingShortcut(false); event.currentTarget.blur(); return; }
                 const shortcut = normalizeShortcut(event);
@@ -220,7 +222,7 @@ export default function TranslationWindow() {
                   .then((registered) => { setSettings((current) => ({ ...current, shortcut: registered })); setShortcutError(""); setRecordingShortcut(false); field.blur(); })
                   .catch((failure) => setShortcutError(String(failure)));
               }} />
-              <small>点击输入框，再按新的组合键</small>
+              <small>{t.translator.shortcutHint}</small>
             </label>
             {(shortcutError || error) && <p className="translation-window__error" role="alert">{shortcutError || error}</p>}
           </section>
@@ -228,25 +230,25 @@ export default function TranslationWindow() {
           <>
             <div className="translation-window__toolbar">
               <span className="translation-window__provider"><span className="translation-window__provider-dot" />DeepSeek AI</span>
-              <label htmlFor="translation-direction">翻译方向</label>
+              <label htmlFor="translation-direction">{t.translator.direction}</label>
               <select id="translation-direction" value={settings.direction} onChange={(event) => setSettings({ ...settings, direction: event.target.value as Direction })}>
-                <option value="auto">自动识别</option><option value="zh-en">中文 → 英文</option><option value="en-zh">英文 → 中文</option>
+                <option value="auto">{t.translator.auto}</option><option value="zh-en">{t.translator.zhEn}</option><option value="en-zh">{t.translator.enZh}</option>
               </select>
             </div>
             <div className="translation-window__content">
               <section className="translation-window__panel translation-window__source">
-                <div className="translation-window__panel-heading"><h2>原文</h2><span>最多 5,000 字</span></div>
-                <textarea id="translation-input" ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setError(""); setDidCopy(false); }} onKeyDown={handleInputKeyDown} placeholder="输入文本，或按 Tab 粘贴最新复制内容" />
-                {!input && clipboardPreview && <button type="button" className="translation-window__clipboard" onClick={() => void pasteLatestClipboard()} title="粘贴最新剪贴板内容"><Clipboard size={14} /><span>剪贴板：{clipboardPreview.slice(0, 120)}</span><kbd>Tab</kbd></button>}
+                <div className="translation-window__panel-heading"><h2>{t.translator.source}</h2><span>{t.translator.limit}</span></div>
+                <textarea id="translation-input" ref={inputRef} value={input} onChange={(event) => { setInput(event.target.value); setError(""); setDidCopy(false); }} onKeyDown={handleInputKeyDown} placeholder={t.translator.placeholder} />
+                {!input && clipboardPreview && <button type="button" className="translation-window__clipboard" onClick={() => void pasteLatestClipboard()} title={t.translator.paste}><Clipboard size={14} /><span>{t.translator.clipboard(clipboardPreview.slice(0, 120))}</span><kbd>Tab</kbd></button>}
               </section>
               <section className="translation-window__panel translation-window__target">
-                <div className="translation-window__panel-heading"><h2>译文</h2><button type="button" className="translation-window__copy" onClick={() => void copyResult()} disabled={!output} title="复制译文" aria-label="复制译文">{didCopy ? <Check size={16} /> : <Copy size={16} />}</button></div>
-                <div className={`translation-window__result ${output ? "translation-window__result--filled" : ""}`} aria-live="polite">{output || (isLoading ? "正在翻译…" : "译文会显示在这里")}</div>
+                <div className="translation-window__panel-heading"><h2>{t.translator.result}</h2><button type="button" className="translation-window__copy" onClick={() => void copyResult()} disabled={!output} title={t.translator.copy} aria-label={t.translator.copy}>{didCopy ? <Check size={16} /> : <Copy size={16} />}</button></div>
+                <div className={`translation-window__result ${output ? "translation-window__result--filled" : ""}`} aria-live="polite">{output || (isLoading ? t.translator.loading : t.translator.emptyResult)}</div>
               </section>
             </div>
             <footer className="translation-window__footer">
-              <div className="translation-window__footer-info">{error ? <span className="translation-window__error" role="alert">{error}</span> : !hasSecret ? <button type="button" className="translation-window__setup" onClick={() => setShowConfig(true)}>配置 DeepSeek 密钥</button> : <span>Enter 翻译 · Shift+Enter 换行</span>}</div>
-              <button type="button" className="translation-window__primary translation-window__translate" onClick={() => void submit()} disabled={isLoading}>翻译 <ArrowRight size={16} /></button>
+              <div className="translation-window__footer-info">{error ? <span className="translation-window__error" role="alert">{error}</span> : !hasSecret ? <button type="button" className="translation-window__setup" onClick={() => setShowConfig(true)}>{t.translator.configureSecret}</button> : <span>{t.translator.enterHint}</span>}</div>
+              <button type="button" className="translation-window__primary translation-window__translate" onClick={() => void submit()} disabled={isLoading}>{t.translator.translate} <ArrowRight size={16} /></button>
             </footer>
           </>
         )}

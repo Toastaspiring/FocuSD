@@ -1,3 +1,6 @@
+import zhCN from "./i18n/locales/zh-CN.ts";
+import type { Translations } from "./i18n/types";
+
 export type MessageSource = "qq" | "wechat" | "qqMail";
 
 export type MessagePreview = {
@@ -7,16 +10,12 @@ export type MessagePreview = {
   receivedAt: number;
 };
 
-export const MESSAGE_SOURCE_LABELS: Record<MessageSource, string> = {
-  qq: "QQ",
-  wechat: "微信",
-  qqMail: "QQ 邮箱",
-};
+export const MESSAGE_SOURCE_LABELS: Record<MessageSource, string> = zhCN.messages.sourceLabels;
 
-export function messagePreviewText(preview: MessagePreview): string {
-  if (preview.source === "wechat") return "你收到了一条消息";
-  if (preview.source === "qqMail") return preview.body.trim() || "收到一封新邮件";
-  return `${preview.title.trim() || "QQ"}：${preview.body.trim() || "收到一条新消息"}`;
+export function messagePreviewText(preview: MessagePreview, copy: Translations["messages"] = zhCN.messages): string {
+  if (preview.source === "wechat") return copy.wechatPreview;
+  if (preview.source === "qqMail") return preview.body.trim() || copy.newMail;
+  return copy.qqPreview(preview.title.trim() || "QQ", preview.body.trim() || copy.newMessage);
 }
 
 export function latestMessagePreview(candidates: (MessagePreview | null)[], latestReceivedAt = -Infinity): MessagePreview | null {

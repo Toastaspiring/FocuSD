@@ -55,7 +55,17 @@ import { useQQMail, type QQMailController } from "./QQMail";
 import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { CollapsedMessageContent } from "./CollapsedMessageContent";
-import { latestMessagePreview, messagePreviewText, MESSAGE_SOURCE_LABELS, type MessageSource } from "./messagePreview";
+import { latestMessagePreview, messagePreviewText, type MessageSource } from "./messagePreview";
+import {
+  LOCALE_CODES,
+  TRANSLATIONS,
+  isLocaleCode,
+  useLocale,
+  useTranslation,
+  type LocaleCode,
+  type Translations,
+} from "./i18n";
+import { getCollapsedTextUnits, getTodoTitleLineCount } from "./utils/text";
 import "./App.css";
 
 export type IslandMode = "collapsed" | "expanded";
@@ -248,8 +258,6 @@ const MUSIC_EXPANDED_ISLAND_HEIGHT = 286;
 const CLIPBOARD_EXPANDED_ISLAND_HEIGHT = 430;
 const EDITOR_EXPANDED_ISLAND_HEIGHT = 430;
 const TODO_ROW_HEIGHT = 46;
-const TODO_TITLE_CHARACTERS_PER_LINE = 32;
-const TODO_MAX_ESTIMATED_TITLE_LINES = 5;
 const TODO_GROW_START_ROWS = 2;
 const TODO_SCROLL_START_ROWS = 6;
 const MAX_CUSTOM_SETTING_PRESETS = 6;
@@ -349,16 +357,17 @@ function getAgentVisualState(snapshot: AgentStatusSnapshot): AgentVisualState {
   return "idle";
 }
 
-function getAgentStatusLabel(snapshot: AgentStatusSnapshot) {
+function getAgentStatusLabel(snapshot: AgentStatusSnapshot, t: Translations) {
   const attentionProvider = AGENT_PROVIDERS.find((provider) =>
     isAgentAttentionPhase(snapshot[provider].phase),
   );
 
   if (attentionProvider) {
     const phase = snapshot[attentionProvider].phase;
+    const providerLabel = AGENT_PROVIDER_LABELS[attentionProvider];
     return phase === "stale"
-      ? `${AGENT_PROVIDER_LABELS[attentionProvider]} 可能已中断`
-      : `${AGENT_PROVIDER_LABELS[attentionProvider]} 运行失败`;
+      ? t.agent.stale(providerLabel)
+      : t.agent.failed(providerLabel);
   }
 
   const runningProvider = AGENT_PROVIDERS.find(
@@ -366,25 +375,25 @@ function getAgentStatusLabel(snapshot: AgentStatusSnapshot) {
   );
 
   if (runningProvider) {
-    return `${AGENT_PROVIDER_LABELS[runningProvider]} 正在运行`;
+    return t.agent.running(AGENT_PROVIDER_LABELS[runningProvider]);
   }
 
-  return "AI Agent 空闲或已完成";
+  return t.agent.idleOrDone;
 }
 
-function getAgentPhaseLabel(phase: AgentTaskPhase) {
+function getAgentPhaseLabel(phase: AgentTaskPhase, t: Translations) {
   switch (phase) {
     case "running":
-      return "正在运行";
+      return t.agent.phase.running;
     case "completed":
-      return "已完成";
+      return t.agent.phase.completed;
     case "failed":
-      return "运行失败";
+      return t.agent.phase.failed;
     case "stale":
-      return "可能已中断";
+      return t.agent.phase.stale;
     case "idle":
     default:
-      return "空闲";
+      return t.agent.phase.idle;
   }
 }
 
@@ -657,27 +666,8 @@ function isDefaultSettingPreset(presetId: string) {
   return LEGACY_DEFAULT_PRESET_IDS.has(presetId);
 }
 
-function getTodoTitleLineCount(title: string) {
-  const visualLength = Array.from(title).reduce(
-    (total, character) => total + (character.charCodeAt(0) > 255 ? 1.6 : 1),
-    0,
-  );
-
-  return clamp(
-    Math.ceil(visualLength / TODO_TITLE_CHARACTERS_PER_LINE),
-    1,
-    TODO_MAX_ESTIMATED_TITLE_LINES,
-  );
-}
-
 function getCollapsedIslandWidth(text: string) {
-  const visualUnits = Array.from(text.trim()).reduce((total, character) => {
-    if (/\s/.test(character)) {
-      return total + 0.35;
-    }
-
-    return total + (character.charCodeAt(0) <= 255 ? 0.55 : 1);
-  }, 0);
+  const visualUnits = getCollapsedTextUnits(text);
   const widthProgress =
     (clamp(
       visualUnits,
@@ -754,7 +744,7 @@ function loadIslandPosition(): IslandPosition | null {
   }
 }
 
-function loadSettingPresets(): IslandPreset[] {
+function loadSettingPresets(t: Translations): IslandPreset[] {
   const stored = window.localStorage.getItem(SETTINGS_PRESETS_STORAGE_KEY);
 
   if (!stored) {
@@ -777,7 +767,7 @@ function loadSettingPresets(): IslandPreset[] {
         name:
           typeof preset.name === "string" && preset.name.trim()
             ? preset.name.trim()
-            : `样式预设 ${index + 1}`,
+            : t.settings.presets.defaultName(index + 1),
         settings: normalizeSettings(preset.settings),
         createdAt:
           typeof preset.createdAt === "number" ? preset.createdAt : Date.now(),
@@ -833,12 +823,14 @@ function getLocalDateString(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function getDisplayDateParts(date: string) {
+function getDisplayDateParts(date: string, t: Translations) {
   const [fallbackYear = date, fallbackMonth = "", fallbackDay = ""] =
     date.split("-");
   const parsedDate = new Date(`${date}T00:00:00`);
-  const weekdays = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
   const hasValidDate = !Number.isNaN(parsedDate.getTime());
+  const weekdayFormatter = new Intl.DateTimeFormat(t.localeTag, {
+    weekday: "long",
+  });
 
   return {
     year: hasValidDate ? String(parsedDate.getFullYear()) : fallbackYear,
@@ -848,7 +840,7 @@ function getDisplayDateParts(date: string) {
     day: hasValidDate
       ? String(parsedDate.getDate()).padStart(2, "0")
       : fallbackDay,
-    weekday: hasValidDate ? weekdays[parsedDate.getDay()] : "",
+    weekday: hasValidDate ? weekdayFormatter.format(parsedDate) : "",
   };
 }
 
@@ -966,6 +958,7 @@ export function IslandShell({
   onPageChange,
   children,
 }: IslandShellProps) {
+  const t = useTranslation();
   const glassFrameRef = useRef<number | null>(null);
   const didDragRef = useRef(false);
   const windowDragRef = useRef<{
@@ -981,11 +974,11 @@ export function IslandShell({
   const [latestPreviewAt, setLatestPreviewAt] = useState(0);
   const preview = latestMessagePreview([
     qqPreview ? { ...qqPreview, source: "qq", receivedAt: qqNotifications.previewReceivedAt ?? 0 } : null,
-    wechatPreviewAt !== null ? { source: "wechat", title: "微信", body: "有新提醒", receivedAt: wechatPreviewAt } : null,
+    wechatPreviewAt !== null ? { source: "wechat", title: t.messages.wechat, body: t.messages.newReminder, receivedAt: wechatPreviewAt } : null,
     qqMail.preview ? { source: "qqMail", title: qqMail.preview.sender, body: qqMail.preview.subject, receivedAt: qqMail.previewReceivedAt ?? 0 } : null,
   ], latestPreviewAt);
   if (preview && preview.receivedAt > latestPreviewAt) setLatestPreviewAt(preview.receivedAt);
-  const messageBadgeLabel = `QQ ${qqNotificationCount} 条通知${wechatPending ? "，微信有新提醒" : ""}`;
+  const messageBadgeLabel = t.messages.badge(qqNotificationCount, wechatPending);
   const isLiquidGlass = appearanceMode === "liquidGlass";
   const isMusicPlaying = mediaState.playbackStatus === "playing";
   const className = [
@@ -1008,7 +1001,7 @@ export function IslandShell({
     `island__agent-status-icon--${agentVisualState}`,
   ].join(" ");
   const collapsedLabel = collapsedTaskTitle
-    ? `待办：${collapsedTaskTitle}`
+    ? t.messages.collapsedTask(collapsedTaskTitle)
     : "fly-island";
 
   useEffect(
@@ -1153,7 +1146,7 @@ export function IslandShell({
           <button
             className="island__open-button"
             type="button"
-            aria-label={preview ? `${messagePreviewText(preview)}，点击打开${MESSAGE_SOURCE_LABELS[preview.source]}` : `${collapsedLabel}，点击展开`}
+            aria-label={preview ? t.messages.openPreview(messagePreviewText(preview, t.messages), t.messages.sourceLabels[preview.source]) : t.messages.expand(collapsedLabel)}
             aria-expanded={preview ? undefined : isExpanded}
             aria-controls={preview ? undefined : "island-panel"}
             onPointerDown={prepareWindowDrag}
@@ -1192,7 +1185,7 @@ export function IslandShell({
             </CollapsedMessageContent>
           </button>
           {qqMail.preview !== null && (
-            <button className="island-message-button island-message-button--compact qq-mail-badge" type="button" aria-label="QQ 邮箱有新邮件，查看邮件" title="查看新邮件" onClick={() => onOpenMessages("qqMail")}>
+            <button className="island-message-button island-message-button--compact qq-mail-badge" type="button" aria-label={t.messages.newMailLabel} title={t.messages.openNewMail} onClick={() => onOpenMessages("qqMail")}>
               <MessageSourceIcon source="qqMail" size={16} />
               <span className="island-message-button__dot" aria-hidden="true" />
             </button>
@@ -1201,14 +1194,14 @@ export function IslandShell({
             isAvailable={mediaState.available || mediaState.audioActive}
             isPlaying={isMusicPlaying}
             audioPeak={mediaState.audioPeak}
-            label="打开音乐控制"
+            label={t.island.openMusic}
             onClick={() => onOpenPage("music")}
           />
           <button
             className="island__quiet-button"
             type="button"
-            title="收起"
-            aria-label="收起岛屿"
+            title={t.island.collapse}
+            aria-label={t.island.collapseIsland}
             onClick={(event) => {
               event.stopPropagation();
               onTuck();
@@ -1235,15 +1228,15 @@ export function IslandShell({
 
             <div
               className="editor-dots"
-              aria-label="岛屿编辑"
+              aria-label={t.island.editor}
             >
               <button
                 className={`dot-button dot-button--todo ${
                   page === "todo" ? "dot-button--active" : ""
                 }`}
                 type="button"
-                title="任务清单"
-                aria-label="任务清单"
+                title={t.island.todoList}
+                aria-label={t.island.todoList}
                 onClick={(event) => {
                   event.stopPropagation();
                   onPageChange("todo");
@@ -1254,8 +1247,8 @@ export function IslandShell({
                   page === "music" ? "dot-button--active" : ""
                 }`}
                 type="button"
-                title="Music"
-                aria-label="Music"
+                title={t.island.music}
+                aria-label={t.island.music}
                 onClick={(event) => {
                   event.stopPropagation();
                   onPageChange("music");
@@ -1266,8 +1259,8 @@ export function IslandShell({
                   page === "clipboard" ? "dot-button--active" : ""
                 }`}
                 type="button"
-                title="剪贴板历史"
-                aria-label="剪贴板历史"
+                title={t.island.clipboardHistory}
+                aria-label={t.island.clipboardHistory}
                 onClick={(event) => {
                   event.stopPropagation();
                   onPageChange("clipboard");
@@ -1278,8 +1271,8 @@ export function IslandShell({
                   page === "layout" ? "dot-button--active" : ""
                 }`}
                 type="button"
-                title="布局编辑"
-                aria-label="布局编辑"
+                title={t.island.layoutEditor}
+                aria-label={t.island.layoutEditor}
                 onClick={(event) => {
                   event.stopPropagation();
                   onPageChange("layout");
@@ -1290,21 +1283,21 @@ export function IslandShell({
             <button
               className="island__collapse-target"
               type="button"
-              aria-label="折叠岛屿"
+              aria-label={t.island.collapseIsland}
               data-window-drag="false"
               onClick={onCollapse}
             />
 
             <div className="window-actions">
-              <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={`消息：${messageBadgeLabel}`} aria-pressed={page === "qq"} title="消息" onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
+              <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={t.messages.label(messageBadgeLabel)} aria-pressed={page === "qq"} title={t.messages.title} onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
                 <Bell size={17} strokeWidth={1.8} />
                 {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
                 className="icon-button"
                 type="button"
-                title="翻译（Alt+C）"
-                aria-label="打开翻译"
+                title={`${t.translator.title} (Alt+C)`}
+                aria-label={t.translator.title}
                 onClick={(event) => {
                   event.stopPropagation();
                   onOpenTranslator();
@@ -1315,8 +1308,8 @@ export function IslandShell({
               <button
                 className="icon-button"
                 type="button"
-                title="复位"
-                aria-label="恢复岛屿默认位置"
+                title={t.island.resetPosition}
+                aria-label={t.island.resetPositionLabel}
                 onClick={(event) => {
                   event.stopPropagation();
                   onResetPosition();
@@ -1327,8 +1320,8 @@ export function IslandShell({
               <button
                 className="icon-button"
                 type="button"
-                title="最小化到托盘"
-                aria-label="最小化到托盘"
+                title={t.island.minimizeToTray}
+                aria-label={t.island.minimizeToTray}
                 onClick={(event) => {
                   event.stopPropagation();
                   onMinimize();
@@ -1522,9 +1515,10 @@ function AppearanceModeControl({
   value: AppearanceMode;
   onChange: (value: AppearanceMode) => void;
 }) {
+  const t = useTranslation();
   return (
     <div className="appearance-mode-control">
-      <span>外观模式</span>
+      <span>{t.settings.appearance.title}</span>
       <div className="appearance-mode-control__segments" role="group">
         <button
           className={value === "classic" ? "appearance-mode-control--active" : ""}
@@ -1532,7 +1526,7 @@ function AppearanceModeControl({
           aria-pressed={value === "classic"}
           onClick={() => onChange("classic")}
         >
-          经典
+          {t.settings.appearance.classic}
         </button>
         <button
           className={
@@ -1542,7 +1536,7 @@ function AppearanceModeControl({
           aria-pressed={value === "liquidGlass"}
           onClick={() => onChange("liquidGlass")}
         >
-          液态玻璃
+          {t.settings.appearance.liquidGlass}
         </button>
       </div>
     </div>
@@ -1582,7 +1576,39 @@ function NumberControl({
   );
 }
 
+function LocaleControl({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: LocaleCode;
+  onChange: (locale: LocaleCode) => void;
+}) {
+  return (
+    <label className="locale-control">
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          if (isLocaleCode(next)) {
+            onChange(next);
+          }
+        }}
+      >
+        {LOCALE_CODES.map((code) => (
+          <option key={code} value={code}>
+            {TRANSLATIONS[code].localeLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function LayoutEditor({
+  locale,
   settings,
   qqNotifications,
   wechatReminders,
@@ -1598,6 +1624,7 @@ function LayoutEditor({
   agentHooksInstallState,
   agentHooksInstallResult,
   agentHooksInstallError,
+  onLocaleChange,
   onSettingsChange,
   onClipboardSettingsChange,
   onReset,
@@ -1612,6 +1639,7 @@ function LayoutEditor({
   onInstallAgentHooks,
   onClipboardShortcutFocusHandled,
 }: {
+  locale: LocaleCode;
   settings: IslandSettings;
   qqNotifications: QQNotificationsController;
   wechatReminders: WeChatRemindersController;
@@ -1627,6 +1655,7 @@ function LayoutEditor({
   agentHooksInstallState: AgentHooksInstallState;
   agentHooksInstallResult: AgentHooksInstallResult | null;
   agentHooksInstallError: string;
+  onLocaleChange: (locale: LocaleCode) => void;
   onSettingsChange: (settings: IslandSettings) => void;
   onClipboardSettingsChange: (settings: ClipboardHistorySettings) => void;
   onReset: () => void;
@@ -1641,6 +1670,7 @@ function LayoutEditor({
   onInstallAgentHooks: () => void;
   onClipboardShortcutFocusHandled: () => void;
 }) {
+  const t = useTranslation();
   const savePathPanelRef = useRef<HTMLElement | null>(null);
   const savePathInputRef = useRef<HTMLInputElement | null>(null);
   const clipboardShortcutPanelRef = useRef<HTMLElement | null>(null);
@@ -1741,30 +1771,41 @@ function LayoutEditor({
       provider,
       label: AGENT_PROVIDER_LABELS[provider],
       phase: status.phase,
-      phaseLabel: getAgentPhaseLabel(status.phase),
+      phaseLabel: getAgentPhaseLabel(status.phase, t),
       needsAttention: isAgentAttentionPhase(status.phase),
     };
   });
-  const agentStatusLabel = getAgentStatusLabel(agentStatus);
+  const agentStatusLabel = getAgentStatusLabel(agentStatus, t);
 
   return (
     <div className="editor-panel">
       <div className="editor-panel__header">
-        <span>设置</span>
+        <span>{t.settings.title}</span>
         <button
           className="reset-button"
           type="button"
-          title="恢复默认"
-          aria-label="恢复默认"
+          title={t.settings.reset}
+          aria-label={t.settings.reset}
           onClick={onReset}
         >
           <RefreshCcw size={15} strokeWidth={2.2} />
         </button>
       </div>
 
+      <section className="settings-section settings-section--language">
+        <div className="settings-section__header">
+          <span>{t.settings.language.title}</span>
+        </div>
+        <LocaleControl
+          label={t.settings.language.label}
+          value={locale}
+          onChange={onLocaleChange}
+        />
+      </section>
+
       <section className="settings-section settings-section--layout">
         <div className="settings-section__header">
-          <span>布局设置</span>
+          <span>{t.settings.layout.title}</span>
         </div>
         <AppearanceModeControl
           value={settings.appearanceMode}
@@ -1773,9 +1814,9 @@ function LayoutEditor({
           }
         />
         <div className="appearance-mode-control">
-          <span>字体</span>
-          <div className="appearance-mode-control__segments" role="group" aria-label="岛屿字体">
-            {([["system", "默认字体"], ["pixel", "像素字体"]] as const).map(([fontFamily, label]) => (
+          <span>{t.settings.appearance.font}</span>
+          <div className="appearance-mode-control__segments" role="group" aria-label={t.settings.appearance.fontLabel}>
+            {([["system", t.settings.appearance.systemFont], ["pixel", t.settings.appearance.pixelFont]] as const).map(([fontFamily, label]) => (
               <button
                 key={fontFamily}
                 className={settings.fontFamily === fontFamily ? "appearance-mode-control--active" : ""}
@@ -1790,7 +1831,7 @@ function LayoutEditor({
         </div>
         {settings.appearanceMode === "liquidGlass" && (
           <SliderControl
-            label="玻璃强度"
+            label={t.settings.appearance.glassStrength}
             value={settings.glassIntensity}
             min={25}
             max={100}
@@ -1802,7 +1843,7 @@ function LayoutEditor({
           />
         )}
         <SliderControl
-          label="不透明度"
+          label={t.settings.layout.opacity}
           value={settings.opacity}
           min={50}
           max={100}
@@ -1811,7 +1852,7 @@ function LayoutEditor({
           onChange={(opacity) => onSettingsChange({ ...settings, opacity })}
         />
         <SliderControl
-          label="折叠岛屿大小"
+          label={t.settings.layout.collapsedScale}
           value={settings.collapsedScale}
           min={0.75}
           max={1.4}
@@ -1820,7 +1861,7 @@ function LayoutEditor({
           onChange={(collapsedScale) => onSettingsChange({ ...settings, collapsedScale })}
         />
         <SliderControl
-          label="展开面板大小"
+          label={t.settings.layout.expandedScale}
           value={settings.expandedScale}
           min={0.75}
           max={1.4}
@@ -1829,7 +1870,7 @@ function LayoutEditor({
           onChange={(expandedScale) => onSettingsChange({ ...settings, expandedScale })}
         />
         <SliderControl
-          label="顶部距离"
+          label={t.settings.layout.marginY}
           value={settings.marginY}
           min={0}
           max={160}
@@ -1838,43 +1879,43 @@ function LayoutEditor({
           onChange={(marginY) => onSettingsChange({ ...settings, marginY })}
         />
         <ToggleControl
-          label="开机自启动"
+          label={t.settings.layout.launchAtStartup}
           checked={launchAtStartup}
           onChange={onLaunchAtStartupChange}
         />
         <ToggleControl
-          label="显示折叠岛屿文字"
+          label={t.settings.layout.showCollapsedText}
           checked={settings.showCollapsedText}
           onChange={(showCollapsedText) =>
             onSettingsChange({ ...settings, showCollapsedText })
           }
         />
         <ToggleControl
-          label="显示岛屿名称"
+          label={t.settings.layout.showTitle}
           checked={settings.showTitle}
           onChange={(showTitle) => onSettingsChange({ ...settings, showTitle })}
         />
       </section>
 
       <section className="settings-section settings-section--messages">
-        <div className="settings-section__header"><span>消息接收</span></div>
+        <div className="settings-section__header"><span>{t.settings.messageReception}</span></div>
         <QQNotificationControls controller={qqNotifications} />
         <WeChatReminderControls controller={wechatReminders} />
       </section>
 
       <section className="settings-section settings-section--todo">
         <div className="settings-section__header">
-          <span>待办设置</span>
+          <span>{t.settings.todo.title}</span>
         </div>
         <ToggleControl
-          label="自动将未完成任务写入下一天"
+          label={t.settings.todo.carryOverIncomplete}
           checked={settings.carryOverIncompleteTodos}
           onChange={(carryOverIncompleteTodos) =>
             onSettingsChange({ ...settings, carryOverIncompleteTodos })
           }
         />
         <ToggleControl
-          label="允许拖动调整任务顺序"
+          label={t.settings.todo.enableReorder}
           checked={settings.enableTodoReorder}
           onChange={(enableTodoReorder) =>
             onSettingsChange({ ...settings, enableTodoReorder })
@@ -1884,7 +1925,7 @@ function LayoutEditor({
 
       <section className="settings-section settings-section--agent-hooks">
         <div className="settings-section__header">
-          <span>AI Agent 状态灯</span>
+          <span>{t.settings.agent.title}</span>
           <button
             className={[
               "agent-hooks-button",
@@ -1905,10 +1946,10 @@ function LayoutEditor({
             )}
             <span>
               {agentHooksInstallState === "installing"
-                ? "安装中"
+                ? t.settings.agent.installing
                 : agentHooksInstallState === "installed"
-                  ? "已安装"
-                  : "安装/修复"}
+                  ? t.settings.agent.installed
+                  : t.settings.agent.install}
             </span>
           </button>
         </div>
@@ -1919,7 +1960,7 @@ function LayoutEditor({
           ].join(" ")}
         >
           <div className="agent-status-panel__summary">
-            <span>当前状态</span>
+            <span>{t.settings.agent.currentStatus}</span>
             <strong>{agentStatusLabel}</strong>
           </div>
           <div className="agent-status-panel__rows">
@@ -1940,15 +1981,15 @@ function LayoutEditor({
                     className="agent-status-clear-button"
                     type="button"
                     disabled={clearingAgentProvider === row.provider}
-                    title={`清除 ${row.label} 状态`}
-                    aria-label={`清除 ${row.label} 状态`}
+                    title={t.settings.agent.clearStatusFor(row.label)}
+                    aria-label={t.settings.agent.clearStatusFor(row.label)}
                     onClick={() => onClearAgentStatus(row.provider)}
                   >
                     <X size={12} strokeWidth={2.4} />
                     <span>
                       {clearingAgentProvider === row.provider
-                        ? "清除中"
-                        : "清除状态"}
+                        ? t.settings.agent.clearing
+                        : t.settings.agent.clearStatus}
                     </span>
                   </button>
                 ) : null}
@@ -1958,7 +1999,7 @@ function LayoutEditor({
         </div>
         {agentHooksInstallState === "installed" && agentHooksInstallResult ? (
           <div className="agent-hooks-status agent-hooks-status--ok">
-            <span>脚本目录</span>
+            <span>{t.settings.agent.scriptsDir}</span>
             <strong title={agentHooksInstallResult.scriptsDir}>
               {agentHooksInstallResult.scriptsDir}
             </strong>
@@ -1982,24 +2023,24 @@ function LayoutEditor({
         ref={clipboardShortcutPanelRef}
       >
         <div className="settings-section__header">
-          <span>剪贴板历史</span>
+          <span>{t.settings.clipboard.title}</span>
         </div>
         <ToggleControl
-          label="记录剪贴板"
+          label={t.settings.clipboard.enabled}
           checked={clipboardSettings.enabled}
           onChange={(enabled) =>
             onClipboardSettingsChange({ ...clipboardSettings, enabled })
           }
         />
         <ToggleControl
-          label="记录图片"
+          label={t.settings.clipboard.captureImages}
           checked={clipboardSettings.captureImages}
           onChange={(captureImages) =>
             onClipboardSettingsChange({ ...clipboardSettings, captureImages })
           }
         />
         <NumberControl
-          label="最大历史条数"
+          label={t.settings.clipboard.maxItems}
           value={clipboardSettings.maxItems}
           min={5}
           max={200}
@@ -2009,7 +2050,7 @@ function LayoutEditor({
         />
         <div className="shortcut-control">
           <div className="shortcut-control__meta">
-            <span>展开快捷键</span>
+            <span>{t.settings.clipboard.shortcut}</span>
             <strong>{normalizeClipboardShortcut(clipboardSettings.shortcut)}</strong>
           </div>
           <button
@@ -2028,7 +2069,7 @@ function LayoutEditor({
             <Keyboard size={14} strokeWidth={2.3} />
             <span>
               {isRecordingShortcut
-                ? "按下组合键"
+                ? t.settings.clipboard.pressKeys
                 : normalizeClipboardShortcut(clipboardSettings.shortcut)}
             </span>
           </button>
@@ -2037,32 +2078,32 @@ function LayoutEditor({
 
       <section className="settings-section settings-section--colors">
         <div className="settings-section__header">
-          <span>颜色设置</span>
+          <span>{t.settings.colors.title}</span>
         </div>
         <div className="color-grid">
           <ColorControl
-            label="任务/待办字样"
+            label={t.settings.colors.taskText}
             value={settings.taskTextColor}
             onChange={(taskTextColor) =>
               onSettingsChange({ ...settings, taskTextColor })
             }
           />
           <ColorControl
-            label="亮点颜色"
+            label={t.settings.colors.pulse}
             value={settings.pulseColor}
             onChange={(pulseColor) =>
               onSettingsChange({ ...settings, pulseColor })
             }
           />
           <ColorControl
-            label="岛屿背景"
+            label={t.settings.colors.islandBackground}
             value={settings.islandBackgroundColor}
             onChange={(islandBackgroundColor) =>
               onSettingsChange({ ...settings, islandBackgroundColor })
             }
           />
           <ColorControl
-            label="待办纸张"
+            label={t.settings.colors.todoPaper}
             value={settings.todoBackgroundColor}
             onChange={(todoBackgroundColor) =>
               onSettingsChange({ ...settings, todoBackgroundColor })
@@ -2070,7 +2111,7 @@ function LayoutEditor({
           />
         </div>
         <SliderControl
-          label="亮点亮度"
+          label={t.settings.colors.pulseBrightness}
           value={settings.pulseBrightness}
           min={50}
           max={160}
@@ -2084,18 +2125,18 @@ function LayoutEditor({
 
       <section className="settings-section settings-section--presets">
         <div className="settings-section__header">
-          <span>样式预设</span>
+          <span>{t.settings.presets.title}</span>
           <button
             className="preset-save-button"
             type="button"
             onClick={onSavePreset}
           >
             <Save size={13} strokeWidth={2.2} />
-            <span>保存当前</span>
+            <span>{t.settings.presets.saveCurrent}</span>
           </button>
         </div>
         {presets.length === 0 ? (
-          <div className="preset-empty">还没有样式预设</div>
+          <div className="preset-empty">{t.settings.presets.empty}</div>
         ) : (
           <div className="preset-list" role="list">
             {presets.map((preset) => (
@@ -2113,7 +2154,7 @@ function LayoutEditor({
                   <input
                     className="preset-name-input"
                     value={presetNameDraft}
-                    aria-label="样式预设名称"
+                    aria-label={t.settings.presets.nameLabel}
                     autoFocus
                     onChange={(event) =>
                       setPresetNameDraft(event.currentTarget.value)
@@ -2134,7 +2175,11 @@ function LayoutEditor({
                   <button
                     className="preset-name-button"
                     type="button"
-                    title={preset.isDefault ? "默认样式预设" : "重命名样式预设"}
+                    title={
+                      preset.isDefault
+                        ? t.settings.presets.defaultPreset
+                        : t.settings.presets.rename
+                    }
                     disabled={preset.isDefault}
                     onClick={() => {
                       if (!preset.isDefault) {
@@ -2150,7 +2195,7 @@ function LayoutEditor({
                   type="button"
                   onClick={() => onApplyPreset(preset.id)}
                 >
-                  启用
+                  {t.settings.presets.apply}
                 </button>
                 {preset.isDefault ? (
                   <span className="preset-delete-spacer" aria-hidden="true" />
@@ -2158,8 +2203,8 @@ function LayoutEditor({
                   <button
                     className="preset-delete-button"
                     type="button"
-                    title="删除样式预设"
-                    aria-label={`删除 ${preset.name}`}
+                    title={t.settings.presets.delete}
+                    aria-label={t.settings.presets.deleteNamed(preset.name)}
                     onClick={() => onDeletePreset(preset.id)}
                   >
                     <Trash2 size={13} strokeWidth={2.2} />
@@ -2183,16 +2228,16 @@ function LayoutEditor({
         ref={savePathPanelRef}
       >
         <div className="settings-section__header save-path-panel__header">
-          <span>待办清单保存路径</span>
+          <span>{t.settings.save.title}</span>
         </div>
         <div className="save-path-row">
           <label className="save-path-field">
-            <span>文件夹</span>
+            <span>{t.settings.save.folder}</span>
             <input
               ref={savePathInputRef}
               value={saveDirectoryDraft}
-              placeholder="D:/Todos"
-              aria-label="待办清单 Markdown 保存文件夹"
+              placeholder={t.settings.save.folderPlaceholder}
+              aria-label={t.settings.save.folderLabel}
               onChange={(event) =>
                 onSaveDirectoryDraftChange(event.currentTarget.value)
               }
@@ -2211,12 +2256,12 @@ function LayoutEditor({
             {savePathState === "saved" ? (
               <>
                 <Check className="save-check-icon" size={15} strokeWidth={2.6} />
-                <span>已保存</span>
+                <span>{t.settings.save.saved}</span>
               </>
             ) : (
               <>
                 <Save size={14} strokeWidth={2.2} />
-                <span>保存</span>
+                <span>{t.settings.save.save}</span>
               </>
             )}
           </button>
@@ -2279,6 +2324,7 @@ function TodoNotebook({
   onArchiveLayoutChange: (layout: ArchiveLayout) => void;
   onSelectArchive: (date: string) => void;
 }) {
+  const t = useTranslation();
   const displayedTodos =
     pageMode === "review" ? selectedArchive?.todos ?? [] : todos;
   const isTodayMode = pageMode === "today";
@@ -2294,10 +2340,12 @@ function TodoNotebook({
     .join(" ");
   const inputPlaceholder =
     pageMode === "today"
-      ? `Add a task for ${currentDate}`
-      : "Review your todos";
+      ? t.notebook.addTaskFor(currentDate)
+      : t.notebook.reviewTodos;
   const archiveTitle =
-    archiveLayout === "cards" ? "Notebook cards" : "Two-column timeline";
+    archiveLayout === "cards"
+      ? t.notebook.notebookCards
+      : t.notebook.twoColumnTimeline;
   const notebookClassName = [
     "todo-notebook",
     isDailyMode ? "todo-notebook--daily" : "",
@@ -2405,7 +2453,7 @@ function TodoNotebook({
   }, []);
 
   return (
-    <section className={notebookClassName} aria-label="任务清单">
+    <section className={notebookClassName} aria-label={t.notebook.sectionLabel}>
       <div className="todo-notebook__spine">
         <button
           className={[
@@ -2416,8 +2464,8 @@ function TodoNotebook({
             .filter(Boolean)
             .join(" ")}
           type="button"
-          title="Back to today's todo list"
-          aria-label="Back to today's todo list"
+          title={t.notebook.backToToday}
+          aria-label={t.notebook.backToToday}
           onClick={onShowToday}
         />
         <button
@@ -2433,8 +2481,8 @@ function TodoNotebook({
             .filter(Boolean)
             .join(" ")}
           type="button"
-          title="Save today's todo list"
-          aria-label="Save today's todo list as markdown"
+          title={t.notebook.saveToday}
+          aria-label={t.notebook.saveTodayMarkdown}
           onClick={onSaveToday}
         >
           {saveState === "saved" && (
@@ -2452,8 +2500,8 @@ function TodoNotebook({
             .filter(Boolean)
             .join(" ")}
           type="button"
-          title="Review saved todo lists"
-          aria-label="Review saved todo lists"
+          title={t.notebook.reviewSaved}
+          aria-label={t.notebook.reviewSaved}
           onClick={onShowArchive}
         />
       </div>
@@ -2467,10 +2515,10 @@ function TodoNotebook({
               <ClipboardList size={15} strokeWidth={2.1} />
             )}
             {isReviewMode
-              ? selectedArchive?.date ?? "Review"
+              ? selectedArchive?.date ?? t.notebook.reviewTab
               : isDailyMode
-                ? "DAILY"
-                : "Tasks"}
+                ? t.notebook.dailyTab
+                : t.notebook.tasksTab}
           </span>
           {!isArchiveMode && !isReviewMode && (
             <button
@@ -2481,8 +2529,10 @@ function TodoNotebook({
                 .filter(Boolean)
                 .join(" ")}
               type="button"
-              title={isDailyMode ? "Back to tasks" : "Open daily note"}
-              aria-label={isDailyMode ? "Back to tasks" : "Open daily note"}
+              title={isDailyMode ? t.notebook.backToTasks : t.notebook.openDailyNote}
+              aria-label={
+                isDailyMode ? t.notebook.backToTasks : t.notebook.openDailyNote
+              }
               onClick={isDailyMode ? onShowToday : onShowDaily}
             >
               {isDailyMode ? (
@@ -2498,8 +2548,8 @@ function TodoNotebook({
             <button
               className={archiveLayout === "cards" ? "archive-layout-toggle--active" : ""}
               type="button"
-              title="Notebook cards"
-              aria-label="Notebook cards"
+              title={t.notebook.notebookCards}
+              aria-label={t.notebook.notebookCards}
               onClick={() => onArchiveLayoutChange("cards")}
             >
               <ClipboardList size={14} strokeWidth={2.1} />
@@ -2507,15 +2557,17 @@ function TodoNotebook({
             <button
               className={archiveLayout === "timeline" ? "archive-layout-toggle--active" : ""}
               type="button"
-              title="Two-column timeline"
-              aria-label="Two-column timeline"
+              title={t.notebook.twoColumnTimeline}
+              aria-label={t.notebook.twoColumnTimeline}
               onClick={() => onArchiveLayoutChange("timeline")}
             >
               <Columns2 size={14} strokeWidth={2.1} />
             </button>
           </div>
         ) : (
-          <span className="todo-notebook__open-count">{openCount} open</span>
+          <span className="todo-notebook__open-count">
+            {t.notebook.openCount(openCount)}
+          </span>
         )}
       </div>
 
@@ -2534,7 +2586,7 @@ function TodoNotebook({
             value={draft}
             disabled={!isTodayMode}
             placeholder={inputPlaceholder}
-            aria-label="Add a task, press Enter to save"
+            aria-label={t.notebook.addTaskHint}
             onChange={(event) => onDraftChange(event.currentTarget.value)}
           />
         </form>
@@ -2550,8 +2602,8 @@ function TodoNotebook({
         <textarea
           className="daily-note"
           value={dailyNote}
-          placeholder="Write today's notes..."
-          aria-label="Daily note"
+          placeholder={t.notebook.dailyPlaceholder}
+          aria-label={t.notebook.dailyNoteLabel}
           spellCheck={false}
           onChange={(event) => onDailyNoteChange(event.currentTarget.value)}
         />
@@ -2559,7 +2611,7 @@ function TodoNotebook({
         <div className={listClassName} role="list">
           {displayedTodos.length === 0 ? (
             <div className="todo-empty">
-              {isReviewMode ? "Nothing was written here" : "今天还很轻"}
+              {isReviewMode ? t.todo.emptyReview : t.todo.empty}
             </div>
           ) : (
             displayedTodos.map((todo) => {
@@ -2594,10 +2646,11 @@ function TodoNotebook({
                     type="button"
                     aria-pressed={todo.completed}
                     disabled={!isTodayMode}
-                    title={todo.completed ? "标记未完成" : "完成"}
-                    aria-label={`${todo.completed ? "标记未完成" : "完成"}：${
-                      todo.title
-                    }`}
+                    title={todo.completed ? t.todo.markIncomplete : t.todo.complete}
+                    aria-label={t.todo.actionOnTask(
+                      todo.completed ? t.todo.markIncomplete : t.todo.complete,
+                      todo.title,
+                    )}
                     onClick={() => onToggleTodo(todo.id)}
                   >
                     {todo.completed && <Check size={14} strokeWidth={2.5} />}
@@ -2606,7 +2659,7 @@ function TodoNotebook({
                     <input
                       className="todo-title-input"
                       value={todoTitleDraft}
-                      aria-label="编辑任务名"
+                      aria-label={t.todo.editTitle}
                       autoFocus
                       onChange={(event) =>
                         setTodoTitleDraft(event.currentTarget.value)
@@ -2627,7 +2680,7 @@ function TodoNotebook({
                     <button
                       className="todo-title todo-title--editable"
                       type="button"
-                      title="编辑任务名"
+                      title={t.todo.editTitle}
                       onClick={() => startTodoTitleEdit(todo)}
                     >
                       {todo.title}
@@ -2642,19 +2695,22 @@ function TodoNotebook({
                           .filter(Boolean)
                           .join(" ")}
                         type="button"
-                        title={isActive ? "结束" : "开始"}
-                        aria-label={`${isActive ? "结束" : "开始"}：${todo.title}`}
+                        title={isActive ? t.todo.stop : t.todo.start}
+                        aria-label={t.todo.actionOnTask(
+                          isActive ? t.todo.stop : t.todo.start,
+                          todo.title,
+                        )}
                         disabled={todo.completed}
                         onClick={() => onStartTodo(todo.id)}
                       >
                         <Play size={13} strokeWidth={2.4} />
-                        <span>{isActive ? "结束" : "开始"}</span>
+                        <span>{isActive ? t.todo.stop : t.todo.start}</span>
                       </button>
                       <button
                         className="todo-delete"
                         type="button"
-                        title="删除"
-                        aria-label={`删除：${todo.title}`}
+                        title={t.todo.delete}
+                        aria-label={t.todo.deleteTask(todo.title)}
                         onClick={() => onDeleteTodo(todo.id)}
                       >
                         <Trash2 size={14} strokeWidth={2.2} />
@@ -2663,8 +2719,8 @@ function TodoNotebook({
                         <button
                           className="todo-drag-handle"
                           type="button"
-                          title="拖动排序"
-                          aria-label={`拖动排序：${todo.title}`}
+                          title={t.todo.reorder}
+                          aria-label={t.todo.reorderTask(todo.title)}
                           disabled={editingTodoId === todo.id}
                           onPointerDown={(event) => startTodoDrag(event, todo.id)}
                           onPointerMove={moveTodoDrag}
@@ -2695,6 +2751,7 @@ function ArchiveBrowser({
   layout: ArchiveLayout;
   onSelectArchive: (date: string) => void;
 }) {
+  const t = useTranslation();
   const handleHorizontalWheel = (event: WheelEvent<HTMLDivElement>) => {
     if (layout !== "cards") {
       return;
@@ -2705,7 +2762,7 @@ function ArchiveBrowser({
   };
 
   if (archives.length === 0) {
-    return <div className="todo-empty">No saved lists yet</div>;
+    return <div className="todo-empty">{t.archive.noSavedLists}</div>;
   }
 
   if (layout === "timeline") {
@@ -2731,7 +2788,7 @@ function ArchiveBrowser({
     <div className="archive-cards" role="list" onWheel={handleHorizontalWheel}>
       {archives.map((archive) => {
         const previewTodos = archive.todos.slice(0, 3);
-        const dateParts = getDisplayDateParts(archive.date);
+        const dateParts = getDisplayDateParts(archive.date, t);
 
         return (
           <button
@@ -2741,7 +2798,7 @@ function ArchiveBrowser({
             role="listitem"
             onClick={() => onSelectArchive(archive.date)}
           >
-            <span className="archive-card__eyebrow">TODAY</span>
+            <span className="archive-card__eyebrow">{t.archive.eyebrow}</span>
             <strong className="archive-card__date">
               <span>{dateParts.year}</span>
               <span>
@@ -2766,7 +2823,7 @@ function ArchiveBrowser({
                   </span>
                 ))
               ) : (
-                <span className="archive-card__empty">No tasks</span>
+                <span className="archive-card__empty">{t.archive.noTasks}</span>
               )}
             </span>
           </button>
@@ -2791,16 +2848,17 @@ function MusicPlayerPanel({
   onNext: () => void;
   onPrevious: () => void;
 }) {
+  const t = useTranslation();
   const isPlaying = mediaState.playbackStatus === "playing";
   const isPaused = mediaState.playbackStatus === "paused";
   const hasAudioSignal = mediaState.available || mediaState.audioActive;
   const statusLabel = commandError
-    ? "Control failed"
+    ? t.music.controlFailed
     : isPaused
-      ? "Paused"
+      ? t.music.paused
       : isPlaying
-        ? "Playing"
-        : "No media";
+        ? t.music.playing
+        : t.music.noMedia;
   const peakPercent = Math.round(
     clamp(Math.log1p(mediaState.audioPeak * 160) / Math.log1p(160), 0, 1) *
       100,
@@ -2815,7 +2873,7 @@ function MusicPlayerPanel({
       ]
         .filter(Boolean)
         .join(" ")}
-      aria-label="Music player"
+      aria-label={t.music.playerLabel}
       title={commandError ?? undefined}
     >
       <div className="music-player__signal">
@@ -2834,8 +2892,8 @@ function MusicPlayerPanel({
         <button
           className="music-control-button"
           type="button"
-          title="Previous"
-          aria-label="Previous track"
+          title={t.music.previous}
+          aria-label={t.music.previousTrack}
           onClick={onPrevious}
         >
           <SkipBack size={18} strokeWidth={2.4} />
@@ -2843,8 +2901,8 @@ function MusicPlayerPanel({
         <button
           className="music-control-button music-control-button--primary"
           type="button"
-          title={isPlaying ? "Pause" : "Play"}
-          aria-label={isPlaying ? "Pause" : "Play"}
+          title={isPlaying ? t.music.pause : t.music.play}
+          aria-label={isPlaying ? t.music.pause : t.music.play}
           aria-busy={isTrackChanging}
           onClick={onPlayPause}
         >
@@ -2863,8 +2921,8 @@ function MusicPlayerPanel({
         <button
           className="music-control-button"
           type="button"
-          title="Next"
-          aria-label="Next track"
+          title={t.music.next}
+          aria-label={t.music.nextTrack}
           onClick={onNext}
         >
           <SkipForward size={18} strokeWidth={2.4} />
@@ -2959,6 +3017,7 @@ function ClipboardHistoryPanel({
   onDeleteItem: (id: string) => Promise<void> | void;
   onClear: () => Promise<void> | void;
 }) {
+  const t = useTranslation();
   const [query, setQuery] = useState("");
   const [clipboardView, setClipboardView] = useState<"all" | "favorites">("all");
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
@@ -3246,21 +3305,24 @@ function ClipboardHistoryPanel({
   }, [isConfirmingClear, onClear]);
 
   return (
-    <section className="clipboard-panel" aria-label="剪贴板历史">
+    <section className="clipboard-panel" aria-label={t.clipboard.title}>
       <header className="clipboard-panel__header">
         <div className="clipboard-panel__title">
           <ClipboardList size={16} strokeWidth={2.2} />
-          <span>剪贴板历史</span>
+          <span>{t.clipboard.title}</span>
           <strong>{snapshot.items.length}</strong>
           {favoriteItems.length > 0 && (
-            <em aria-label={`${favoriteItems.length} 条收藏`}>
+            <em aria-label={t.clipboard.favoriteCount(favoriteItems.length)}>
               <Star size={10} strokeWidth={2.4} fill="currentColor" />
               {favoriteItems.length}
             </em>
           )}
         </div>
         <div className="clipboard-panel__tools">
-          <span className="clipboard-shortcut-display" aria-label="展开快捷键">
+          <span
+            className="clipboard-shortcut-display"
+            aria-label={t.clipboard.expandShortcut}
+          >
             <Keyboard size={14} strokeWidth={2.3} />
             <span>{normalizeClipboardShortcut(snapshot.settings.shortcut)}</span>
           </span>
@@ -3273,8 +3335,10 @@ function ClipboardHistoryPanel({
               .join(" ")}
             type="button"
             disabled={snapshot.items.length === 0}
-            title={isConfirmingClear ? "确认清空" : "清空"}
-            aria-label={isConfirmingClear ? "确认清空" : "清空剪贴板历史"}
+            title={isConfirmingClear ? t.clipboard.confirmClear : t.clipboard.clear}
+            aria-label={
+              isConfirmingClear ? t.clipboard.confirmClear : t.clipboard.clearHistory
+            }
             onClick={handleClear}
             data-clipboard-confirm-control="true"
           >
@@ -3287,14 +3351,14 @@ function ClipboardHistoryPanel({
         </div>
       </header>
 
-      <div className="clipboard-segments" aria-label="剪贴板栏目">
+      <div className="clipboard-segments" aria-label={t.clipboard.segments}>
         <button
           className={clipboardView === "all" ? "clipboard-segment--active" : ""}
           type="button"
           aria-pressed={clipboardView === "all"}
           onClick={() => setClipboardView("all")}
         >
-          全部
+          {t.clipboard.all}
         </button>
         <button
           className={clipboardView === "favorites" ? "clipboard-segment--active" : ""}
@@ -3302,7 +3366,7 @@ function ClipboardHistoryPanel({
           aria-pressed={clipboardView === "favorites"}
           onClick={() => setClipboardView("favorites")}
         >
-          收藏
+          {t.clipboard.favorites}
         </button>
       </div>
 
@@ -3310,15 +3374,15 @@ function ClipboardHistoryPanel({
         <Search size={15} strokeWidth={2.2} />
         <input
           value={query}
-          placeholder="搜索内容或备注"
-          aria-label="搜索剪贴板内容或备注"
+          placeholder={t.clipboard.searchPlaceholder}
+          aria-label={t.clipboard.searchLabel}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
         {query && (
           <button
             type="button"
-            title="清除搜索"
-            aria-label="清除搜索"
+            title={t.clipboard.clearSearch}
+            aria-label={t.clipboard.clearSearch}
             onClick={() => setQuery("")}
           >
             <X size={14} strokeWidth={2.4} />
@@ -3330,10 +3394,10 @@ function ClipboardHistoryPanel({
         {filteredItems.length === 0 ? (
           <div className="clipboard-empty">
             {snapshot.items.length === 0
-              ? "复制文本或图片后会出现在这里"
+              ? t.clipboard.emptyAll
               : clipboardView === "favorites" && favoriteItems.length === 0
-                ? "还没有收藏剪贴记录"
-                : "没有匹配的剪贴记录"}
+                ? t.clipboard.emptyFavorites
+                : t.clipboard.emptySearch}
           </div>
         ) : (
           filteredItems.map((item) => (
@@ -3352,7 +3416,7 @@ function ClipboardHistoryPanel({
               <button
                 className="clipboard-item__main"
                 type="button"
-                title="复制回剪贴板"
+                title={t.clipboard.copyBack}
                 onClick={() => handleCopyItem(item.id)}
               >
                 {item.kind === "image" ? (
@@ -3385,8 +3449,8 @@ function ClipboardHistoryPanel({
                       autoFocus
                       value={noteDraft}
                       maxLength={80}
-                      placeholder="备注这是什么"
-                      aria-label="剪贴记录备注"
+                      placeholder={t.clipboard.notePlaceholder}
+                      aria-label={t.clipboard.noteInputLabel}
                       disabled={isSavingNote}
                       onChange={(event) => setNoteDraft(event.currentTarget.value)}
                       onKeyDown={(event) => {
@@ -3398,16 +3462,16 @@ function ClipboardHistoryPanel({
                     />
                     <button
                       type="submit"
-                      title="保存备注"
-                      aria-label="保存备注"
+                      title={t.clipboard.saveNote}
+                      aria-label={t.clipboard.saveNote}
                       disabled={isSavingNote}
                     >
                       <Check size={13} strokeWidth={2.6} />
                     </button>
                     <button
                       type="button"
-                      title="取消编辑"
-                      aria-label="取消编辑备注"
+                      title={t.clipboard.cancelEdit}
+                      aria-label={t.clipboard.cancelEditNote}
                       disabled={isSavingNote}
                       onClick={cancelEditingNote}
                     >
@@ -3418,12 +3482,14 @@ function ClipboardHistoryPanel({
                   <button
                     className={item.note ? "clipboard-note clipboard-note--filled" : "clipboard-note"}
                     type="button"
-                    title={item.note ? `编辑备注：${item.note}` : "添加备注"}
-                    aria-label={item.note ? `编辑备注：${item.note}` : "添加剪贴记录备注"}
+                    title={item.note ? t.clipboard.editNote(item.note) : t.clipboard.addNote}
+                    aria-label={
+                      item.note ? t.clipboard.editNote(item.note) : t.clipboard.addNoteLabel
+                    }
                     onClick={() => startEditingNote(item)}
                   >
                     <Pencil size={12} strokeWidth={2.3} />
-                    <span>{item.note || "备注"}</span>
+                    <span>{item.note || t.clipboard.noteFallback}</span>
                   </button>
                 )}
               </div>
@@ -3436,8 +3502,12 @@ function ClipboardHistoryPanel({
                     .filter(Boolean)
                     .join(" ")}
                   type="button"
-                  title={item.favorite ? "取消收藏" : "收藏"}
-                  aria-label={item.favorite ? "取消收藏剪贴记录" : "收藏剪贴记录"}
+                  title={item.favorite ? t.clipboard.unfavorite : t.clipboard.favorite}
+                  aria-label={
+                    item.favorite
+                      ? t.clipboard.unfavoriteItem
+                      : t.clipboard.favoriteItem
+                  }
                   aria-pressed={item.favorite}
                   onClick={() => handleToggleFavorite(item.id)}
                 >
@@ -3455,8 +3525,12 @@ function ClipboardHistoryPanel({
                     .filter(Boolean)
                     .join(" ")}
                   type="button"
-                  title={confirmDeleteId === item.id ? "确认删除" : "删除"}
-                  aria-label="删除剪贴记录"
+                  title={
+                    confirmDeleteId === item.id
+                      ? t.clipboard.confirmDelete
+                      : t.clipboard.delete
+                  }
+                  aria-label={t.clipboard.deleteItem}
                   onClick={() => handleDeleteItem(item.id)}
                   data-clipboard-confirm-control="true"
                 >
@@ -3474,8 +3548,8 @@ function ClipboardHistoryPanel({
                     .filter(Boolean)
                     .join(" ")}
                   type="button"
-                  title={copiedItemId === item.id ? "已复制" : "复制"}
-                  aria-label="复制回剪贴板"
+                  title={copiedItemId === item.id ? t.clipboard.copied : t.clipboard.copy}
+                  aria-label={t.clipboard.copyBack}
                   onClick={() => handleCopyItem(item.id)}
                 >
                   {copiedItemId === item.id ? (
@@ -3493,7 +3567,14 @@ function ClipboardHistoryPanel({
   );
 }
 
-function App() {
+function IslandApp({
+  locale,
+  onLocaleChange,
+}: {
+  locale: LocaleCode;
+  onLocaleChange: (locale: LocaleCode) => void;
+}) {
+  const t = useTranslation();
   const [mode, setMode] = useState<IslandMode>("collapsed");
   const [isTucked, setIsTucked] = useState(false);
   const qqNotifications = useQQNotifications(mode === "collapsed" && !isTucked);
@@ -3525,8 +3606,9 @@ function App() {
   const [nativeGlassState, setNativeGlassState] =
     useState<NativeGlassState>("disabled");
   const [launchAtStartup, setLaunchAtStartup] = useState(false);
-  const [settingPresets, setSettingPresets] =
-    useState<IslandPreset[]>(loadSettingPresets);
+  const [settingPresets, setSettingPresets] = useState<IslandPreset[]>(() =>
+    loadSettingPresets(t),
+  );
   const [todos, setTodos] = useState<TodoItem[]>(loadTodos);
   const [dailyNote, setDailyNote] = useState(loadDailyNote);
   const [draftTodo, setDraftTodo] = useState("");
@@ -4485,7 +4567,7 @@ function App() {
       ).length;
       const preset: IslandPreset = {
         id: createTodoId(),
-        name: `样式预设 ${customPresetCount + 1}`,
+        name: t.settings.presets.defaultName(customPresetCount + 1),
         settings,
         createdAt: Date.now(),
         isDefault: false,
@@ -4493,7 +4575,7 @@ function App() {
 
       return mergeWithDefaultSettingPresets([preset, ...currentPresets]);
     });
-  }, [settings]);
+  }, [settings, t]);
 
   const applySettingsPreset = useCallback(
     (presetId: string) => {
@@ -4948,8 +5030,8 @@ function App() {
     [agentStatus],
   );
   const agentStatusLabel = useMemo(
-    () => getAgentStatusLabel(agentStatus),
-    [agentStatus],
+    () => getAgentStatusLabel(agentStatus, t),
+    [agentStatus, t],
   );
 
   const openTranslator = useCallback(() => {
@@ -4994,6 +5076,7 @@ function App() {
         )}
         {page === "layout" && (
           <LayoutEditor
+            locale={locale}
             settings={settings}
             qqNotifications={qqNotifications}
             wechatReminders={wechatReminders}
@@ -5009,6 +5092,7 @@ function App() {
             agentHooksInstallState={agentHooksInstallState}
             agentHooksInstallResult={agentHooksInstallResult}
             agentHooksInstallError={agentHooksInstallError}
+            onLocaleChange={onLocaleChange}
             onSettingsChange={setSettings}
             onClipboardSettingsChange={updateClipboardSettings}
             onReset={resetSettings}
@@ -5075,6 +5159,14 @@ function App() {
         )}
       </IslandShell>
     </main>
+  );
+}
+
+function App() {
+  const { locale, setLocale } = useLocale();
+
+  return (
+    <IslandApp locale={locale} onLocaleChange={setLocale} />
   );
 }
 

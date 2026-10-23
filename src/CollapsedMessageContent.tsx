@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { MessageSourceIcon } from "./MessageSourceIcon";
-import { messagePreviewText, MESSAGE_SOURCE_LABELS, type MessagePreview } from "./messagePreview";
+import { messagePreviewText, type MessagePreview } from "./messagePreview";
+import { useTranslation } from "./i18n";
 import "./CollapsedMessageContent.css";
 
 type ContentTransition = {
@@ -13,16 +14,17 @@ type ContentTransition = {
 };
 
 function MessageContent({ preview }: { preview: MessagePreview }) {
+  const t = useTranslation();
   return <>
     <MessageSourceIcon source={preview.source} size={18} />
     {preview.source === "qq" ? (
       <span className="island-message-preview__text">
         <strong className="island-message-preview__sender">{preview.title.trim() || "QQ"}</strong>
         <span className="island-message-preview__separator" aria-hidden="true">·</span>
-        <span className="island-message-preview__body">{preview.body.trim() || "收到一条新消息"}</span>
+        <span className="island-message-preview__body">{preview.body.trim() || t.messages.newMessage}</span>
       </span>
     ) : (
-      <span className="island-message-preview__body">{messagePreviewText(preview)}</span>
+      <span className="island-message-preview__body">{messagePreviewText(preview, t.messages)}</span>
     )}
   </>;
 }
@@ -36,6 +38,7 @@ export function CollapsedMessageContent({
   enabled: boolean;
   children: ReactNode;
 }) {
+  const t = useTranslation();
   const current = enabled ? preview : null;
   const key = current ? JSON.stringify([current.source, current.receivedAt, current.title, current.body]) : "idle";
   const [transition, setTransition] = useState<ContentTransition>({ key, current, previous: undefined, version: 0, animated: false, previousAnimated: false });
@@ -67,7 +70,7 @@ export function CollapsedMessageContent({
     return () => window.clearTimeout(timer);
   }, [moving, version]);
 
-  const label = current ? `${MESSAGE_SOURCE_LABELS[current.source]}：${messagePreviewText(current)}` : undefined;
+  const label = current ? t.messages.qqPreview(t.messages.sourceLabels[current.source], messagePreviewText(current, t.messages)) : undefined;
   const row = (message: MessagePreview | null) => message ? <MessageContent preview={message} /> : children;
 
   return (
