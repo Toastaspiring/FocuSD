@@ -162,7 +162,7 @@ impl Default for IslandWindowState {
             is_dragging: false,
             glass_enabled: false,
             glass_intensity: 72.0,
-            glass_tint: (16, 16, 19),
+            glass_tint: (47, 47, 55),
         }
     }
 }

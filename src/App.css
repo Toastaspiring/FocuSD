@@ -83,12 +83,12 @@ input,
   --island-pulse-color: #3ae489;
   --island-pulse-glow-color: rgba(58, 228, 137, 0.72);
   --island-pulse-brightness: 100%;
-  --island-background-color: #101013;
+  --island-background-color: #2F2F37;
   --todo-background-color: #f8f4e9;
   --glass-intensity: 0.72;
   --glass-mask-opacity: 0.53;
-  --glass-tint-color: rgba(16, 16, 19, 0.53);
-  --glass-collapsed-tint-color: rgba(16, 16, 19, 0.8);
+  --glass-tint-color: rgba(47, 47, 55, 0.53);
+  --glass-collapsed-tint-color: rgba(47, 47, 55, 0.8);
   width: 100vw;
   height: 100vh;
   display: flex;

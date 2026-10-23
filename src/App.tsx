@@ -309,7 +309,7 @@ const DEFAULT_SETTINGS: IslandSettings = {
   taskTextColor: DEFAULT_TASK_TEXT_COLOR,
   pulseColor: "#3ae489",
   pulseBrightness: 100,
-  islandBackgroundColor: "#101013",
+  islandBackgroundColor: "#2F2F37",
   todoBackgroundColor: "#ffffff",
   showTitle: false,
   showCollapsedText: true,
