@@ -300,6 +300,15 @@ export type Translations = {
     title: string;
     reset: string;
 
+    project: {
+      title: string;
+      star: string;
+      starHint: string;
+      latestRelease: string;
+      latestReleaseHint: string;
+      openFailed: string;
+    };
+
     language: {
       title: string;
       label: string;

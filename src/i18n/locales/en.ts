@@ -297,6 +297,15 @@ const en: Translations = {
     title: "Settings",
     reset: "Reset to defaults",
 
+    project: {
+      title: "About the island",
+      star: "Enjoying your little island?",
+      starHint: "Give it a Star on GitHub",
+      latestRelease: "View latest release",
+      latestReleaseHint: "See what washed ashore in the latest update",
+      openFailed: "Couldn't open your browser. Please try again.",
+    },
+
     language: {
       title: "Language",
       label: "Interface language",

@@ -300,6 +300,15 @@ const zhCN: Translations = {
     title: "设置",
     reset: "恢复默认",
 
+    project: {
+      title: "关于小岛",
+      star: "觉得小岛还不错？",
+      starHint: "去 GitHub 给小岛一颗 Star",
+      latestRelease: "查看最新版本",
+      latestReleaseHint: "看看小岛又长了什么新本领",
+      openFailed: "暂时没能打开浏览器，请再试一次。",
+    },
+
     language: {
       title: "语言",
       label: "界面语言",

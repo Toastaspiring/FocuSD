@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type WheelEvent,
@@ -18,6 +19,7 @@ import {
   ClipboardList,
   Columns2,
   Copy,
+  ExternalLink,
   GripVertical,
   ImageIcon,
   Keyboard,
@@ -38,9 +40,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   QQNotificationControls,
   useQQNotifications,
@@ -1696,6 +1699,24 @@ function LayoutEditor({
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [presetNameDraft, setPresetNameDraft] = useState("");
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false);
+  const [projectLinkFailed, setProjectLinkFailed] = useState(false);
+
+  const openProjectLink = async (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!isTauri()) {
+      return;
+    }
+
+    event.preventDefault();
+    const url = event.currentTarget.href;
+    setProjectLinkFailed(false);
+
+    try {
+      await openUrl(url);
+    } catch (error) {
+      console.error("Failed to open project link", error);
+      setProjectLinkFailed(true);
+    }
+  };
 
   const startPresetRename = useCallback((preset: IslandPreset) => {
     setEditingPresetId(preset.id);
@@ -1720,9 +1741,9 @@ function LayoutEditor({
     const frame = window.requestAnimationFrame(() => {
       const editorPanel = savePathPanelRef.current?.closest(".editor-panel");
 
-      if (editorPanel instanceof HTMLElement) {
+      if (editorPanel instanceof HTMLElement && savePathPanelRef.current) {
         editorPanel.scrollTo({
-          top: editorPanel.scrollHeight,
+          top: savePathPanelRef.current.offsetTop - 12,
           behavior: "smooth",
         });
       }
@@ -2291,6 +2312,43 @@ function LayoutEditor({
             )}
           </button>
         </div>
+      </section>
+
+      <section className="settings-section settings-section--project">
+        <div className="settings-section__header">
+          <span>{t.settings.project.title}</span>
+        </div>
+        <a
+          className="project-link project-link--star"
+          href="https://github.com/flyl1u/fly-island"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={openProjectLink}
+        >
+          <Star className="project-link__icon" size={19} strokeWidth={1.8} aria-hidden="true" />
+          <span className="project-link__copy">
+            <strong>{t.settings.project.star}</strong>
+            <span>{t.settings.project.starHint}</span>
+          </span>
+          <ExternalLink className="project-link__arrow" size={14} aria-hidden="true" />
+        </a>
+        <a
+          className="project-link"
+          href="https://github.com/flyl1u/fly-island/releases/latest"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={openProjectLink}
+        >
+          <RefreshCcw className="project-link__icon" size={18} strokeWidth={1.8} aria-hidden="true" />
+          <span className="project-link__copy">
+            <strong>{t.settings.project.latestRelease}</strong>
+            <span>{t.settings.project.latestReleaseHint}</span>
+          </span>
+          <ExternalLink className="project-link__arrow" size={14} aria-hidden="true" />
+        </a>
+        {projectLinkFailed && (
+          <p className="project-link-error" role="alert">{t.settings.project.openFailed}</p>
+        )}
       </section>
     </div>
   );
