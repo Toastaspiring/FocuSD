@@ -1349,7 +1349,7 @@ export function IslandShell({
                 {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
-                className="icon-button icon-button--labeled island-translate-button"
+                className="icon-button island-translate-button"
                 type="button"
                 title={`${t.translator.title} (Alt+C)`}
                 aria-label={t.translator.title}
@@ -1359,10 +1359,9 @@ export function IslandShell({
                 }}
               >
                 <Languages size={18} strokeWidth={1.9} aria-hidden="true" />
-                <span>{t.translator.translate}</span>
               </button>
               <button
-                className={`icon-button icon-button--labeled island-reset-button${
+                className={`icon-button island-reset-button${
                   isDetached ? " island-reset-button--available" : ""
                 }`}
                 type="button"
@@ -1374,7 +1373,6 @@ export function IslandShell({
                 }}
               >
                 <RotateCcw size={16} strokeWidth={2} aria-hidden="true" />
-                <span>{t.island.resetPosition}</span>
               </button>
               <button
                 className="icon-button"
