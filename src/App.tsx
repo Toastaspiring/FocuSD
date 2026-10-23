@@ -978,6 +978,7 @@ export function IslandShell({
     startY: number;
   } | null>(null);
   const isExpanded = mode === "expanded";
+  const [isPreparing, setIsPreparing] = useState(isTauri);
   const qqPreview = qqNotifications.preview;
   const qqNotificationCount = qqNotifications.snapshot.items.length;
   const wechatPending = wechatReminders.snapshot.pending;
@@ -997,6 +998,7 @@ export function IslandShell({
     `island--${mode}`,
     `island--${page}`,
     `island--appearance-${appearanceMode}`,
+    isPreparing && !isExpanded ? "island--preparing" : "",
     isDetached ? "island--detached" : "island--docked",
     isLiquidGlass ? `island--glass-${nativeGlassState}` : "",
     showTitle ? "" : "island--title-hidden",
@@ -1027,6 +1029,38 @@ export function IslandShell({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!isPreparing) {
+      return;
+    }
+    if (isExpanded) {
+      setIsPreparing(false);
+      return;
+    }
+
+    let didCancel = false;
+    let frame: number | null = null;
+    let timer: number | null = null;
+    // Opacity zero skips rasterization. Give the first panel a brief paint at
+    // sub-pixel alpha while it is inert, before the first user-triggered reveal.
+    void document.fonts.ready.then(() => {
+      if (didCancel) {
+        return;
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = window.requestAnimationFrame(() => {
+          timer = window.setTimeout(() => setIsPreparing(false), 180);
+        });
+      });
+    });
+
+    return () => {
+      didCancel = true;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [isExpanded, isPreparing]);
 
   const handleGlassPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -3976,7 +4010,15 @@ function IslandApp({
     isRefreshingAgentStatus.current = true;
     try {
       const snapshot = await invoke<AgentStatusSnapshot>("get_agent_status");
-      setAgentStatus(snapshot);
+      setAgentStatus((currentState) =>
+        currentState.statusPath === snapshot.statusPath &&
+        AGENT_PROVIDERS.every((provider) =>
+          currentState[provider].phase === snapshot[provider].phase &&
+          currentState[provider].taskId === snapshot[provider].taskId,
+        )
+          ? currentState
+          : snapshot,
+      );
     } catch (error) {
       console.error("Failed to read agent status", error);
       setAgentStatus(DEFAULT_AGENT_STATUS);
@@ -4194,26 +4236,27 @@ function IslandApp({
           mediaPlaybackIntent.current = null;
         }
 
-        if (playbackStatus === "paused") {
-          return {
-            ...nextMediaState,
-            audioActive: false,
-            audioPeak: 0,
-            playbackStatus,
-          };
-        }
-
         const nextPeak = Math.max(
           currentState.audioPeak * 0.82,
           nextMediaState.audioPeak,
         );
-        const audioActive =
-          nextMediaState.audioActive || nextPeak > AUDIO_ACTIVE_THRESHOLD;
+        const audioActive = playbackStatus !== "paused" &&
+          (nextMediaState.audioActive || nextPeak > AUDIO_ACTIVE_THRESHOLD);
+        const audioPeak = audioActive ? nextPeak : 0;
+
+        if (
+          currentState.available === nextMediaState.available &&
+          currentState.playbackStatus === playbackStatus &&
+          currentState.audioActive === audioActive &&
+          currentState.audioPeak === audioPeak
+        ) {
+          return currentState;
+        }
 
         return {
           ...nextMediaState,
           audioActive,
-          audioPeak: audioActive ? nextPeak : 0,
+          audioPeak,
           playbackStatus,
         };
       });
@@ -4320,6 +4363,13 @@ function IslandApp({
             intent.status === "paused";
 
           if (currentState.playbackStatus === "paused" || isPauseIntent) {
+            if (
+              currentState.playbackStatus === "paused" &&
+              !currentState.audioActive &&
+              currentState.audioPeak === 0
+            ) {
+              return currentState;
+            }
             return {
               ...currentState,
               audioActive: false,
@@ -4334,11 +4384,19 @@ function IslandApp({
             : decayedPeak;
           const audioActive =
             (audioLevel.active || nextPeak > AUDIO_ACTIVE_THRESHOLD * 1.5);
+          const audioPeak = audioActive ? nextPeak : 0;
+
+          if (
+            currentState.audioActive === audioActive &&
+            currentState.audioPeak === audioPeak
+          ) {
+            return currentState;
+          }
 
           return {
             ...currentState,
             audioActive,
-            audioPeak: audioActive ? nextPeak : 0,
+            audioPeak,
           };
         });
       } catch (error) {

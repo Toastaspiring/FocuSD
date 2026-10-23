@@ -123,14 +123,12 @@ input,
   overflow: visible;
   transform: scale(var(--island-scale));
   transform-origin: top center;
-  will-change: width, height, border-radius, transform;
+  will-change: transform;
   transition:
     width 560ms cubic-bezier(0.16, 1, 0.3, 1),
     height 560ms cubic-bezier(0.16, 1, 0.3, 1),
     border-radius 560ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
-    background 260ms ease,
-    box-shadow 300ms ease;
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .island__surface {
@@ -364,15 +362,19 @@ input,
 .island__collapsed,
 .island__expanded {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 50%;
   z-index: 2;
+  will-change: opacity, transform;
   transition:
     opacity 120ms ease,
-    transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 180ms ease;
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .island__collapsed {
+  width: var(--collapsed-island-width);
+  height: 38px;
+  margin-left: calc(var(--collapsed-island-width) / -2);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -384,7 +386,6 @@ input,
 .island--expanded .island__collapsed {
   pointer-events: none;
   opacity: 0;
-  filter: blur(4px);
   transform: translateY(-6px);
 }
 
@@ -623,26 +624,35 @@ input,
 }
 
 .island__expanded {
+  width: 560px;
+  height: var(--expanded-island-height, 306px);
+  margin-left: -280px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 18px 20px 20px;
   pointer-events: none;
   opacity: 0;
-  filter: blur(6px);
   transform: translateY(-6px);
   transform-origin: top center;
+}
+
+.island--preparing.island--collapsed .island__surface {
+  overflow: visible;
+}
+
+.island--preparing.island--collapsed .island__expanded {
+  opacity: 0.001;
+  transition: none;
 }
 
 .island--expanded .island__expanded {
   pointer-events: auto;
   opacity: 1;
-  filter: none;
   transform: none;
   transition:
     opacity 260ms ease 160ms,
-    transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 140ms,
-    filter 260ms ease 140ms;
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 140ms;
 }
 
 .island__header {

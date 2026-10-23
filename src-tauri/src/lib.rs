@@ -72,6 +72,7 @@ const AGENT_STATUS_SCRIPT: &str = include_str!("../../scripts/focusd-agent-statu
 
 static WINDOW_STATE: OnceLock<Mutex<IslandWindowState>> = OnceLock::new();
 static POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+static NATIVE_GLASS_INITIALIZED: OnceLock<()> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 enum IslandMode {
@@ -267,11 +268,13 @@ fn set_island_interaction(
     let window = main_window(&app)?;
     let mode = IslandMode::from_value(&mode)?;
     let previous_state = read_window_state();
-    let restored_custom_position = custom_position.filter(|position| {
-        monitor_for_island_position(&window, *position)
-            .ok()
-            .flatten()
-            .is_some()
+    let restored_custom_position = previous_state.custom_position.or_else(|| {
+        custom_position.filter(|position| {
+            monitor_for_island_position(&window, *position)
+                .ok()
+                .flatten()
+                .is_some()
+        })
     });
     let state = mutate_window_state(|state| {
         state.mode = mode;
@@ -308,7 +311,7 @@ fn set_island_interaction(
         state,
         animate_position.unwrap_or(true) && previous_state.is_tucked != state.is_tucked,
     )?;
-    apply_glass_material(&window, previous_state, state)
+    apply_glass_material(&window, state)
 }
 
 #[tauri::command]
@@ -493,7 +496,13 @@ fn get_default_todo_save_directory() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn get_agent_status(app: AppHandle) -> Result<AgentStatusSnapshot, String> {
+async fn get_agent_status(app: AppHandle) -> Result<AgentStatusSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || read_agent_status(app))
+        .await
+        .map_err(|error| format!("Failed to join the agent status task: {error}"))?
+}
+
+fn read_agent_status(app: AppHandle) -> Result<AgentStatusSnapshot, String> {
     let app_dir = app
         .path()
         .app_data_dir()
@@ -1209,7 +1218,6 @@ fn clear_window_glass_region(window: &WebviewWindow) -> Result<(), String> {
 
 fn apply_glass_material(
     window: &WebviewWindow,
-    _previous_state: IslandWindowState,
     state: IslandWindowState,
 ) -> Result<String, String> {
     // The main window is a fixed, transparent stage (820x460), while the island
@@ -1217,8 +1225,13 @@ fn apply_glass_material(
     // the whole HWND and cannot be reliably clipped by SetWindowRgn, leaving a
     // large blurred rectangle around the island. Keep the native state clear
     // and render the glass effect on the island element with CSS instead.
-    let _ = window_vibrancy::clear_acrylic(window);
-    clear_window_glass_region(window)?;
+    // CSS owns the material for the lifetime of the main window. Reapplying
+    // these native resets on every toggle needlessly invalidates its surface.
+    if NATIVE_GLASS_INITIALIZED.get().is_none() {
+        let _ = window_vibrancy::clear_acrylic(window);
+        clear_window_glass_region(window)?;
+        let _ = NATIVE_GLASS_INITIALIZED.set(());
+    }
 
     if state.glass_enabled {
         Ok("css-fallback".to_string())
@@ -1237,12 +1250,15 @@ fn apply_stage_geometry(
     let stage_height = STAGE_WINDOW_HEIGHT
         .max((state.expanded_height * state.expanded_scale).ceil() + STAGE_WINDOW_PADDING_Y);
 
-    window
-        .set_size(Size::Logical(LogicalSize::new(
-            STAGE_WINDOW_WIDTH,
-            stage_height,
-        )))
-        .map_err(|error| error.to_string())?;
+    let stage_size = LogicalSize::new(STAGE_WINDOW_WIDTH, stage_height);
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    if window.inner_size().map_err(|error| error.to_string())?
+        != stage_size.to_physical::<u32>(scale_factor)
+    {
+        window
+            .set_size(Size::Logical(stage_size))
+            .map_err(|error| error.to_string())?;
+    }
 
     let current_monitor = window
         .current_monitor()
@@ -1278,7 +1294,10 @@ fn apply_stage_geometry(
 
     let target = PhysicalPosition::new(x, y);
     let start = window.outer_position().map_err(|error| error.to_string())?;
-    if !animate_position || start == target {
+    if start == target {
+        return Ok(());
+    }
+    if !animate_position {
         return window
             .set_position(Position::Physical(target))
             .map_err(|error| error.to_string());
