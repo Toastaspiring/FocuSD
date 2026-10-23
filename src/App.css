@@ -2659,9 +2659,18 @@ input,
   transition: transform 140ms ease, fill 140ms ease;
 }
 
-.project-link--star:hover .project-link__icon {
-  fill: rgba(255, 209, 102, 0.22);
+.project-link--star:is(:hover, :focus-visible) .project-link__icon {
+  fill: currentColor;
   transform: rotate(-12deg) scale(1.1);
+}
+
+.project-link--release .project-link__icon {
+  transition: transform 180ms ease, color 140ms ease;
+}
+
+.project-link--release:is(:hover, :focus-visible) .project-link__icon {
+  color: #a8d8ea;
+  transform: rotate(-30deg);
 }
 
 .project-link__copy {
@@ -3629,8 +3638,14 @@ input,
   .todo-drag-handle,
   .project-link,
   .project-link--star .project-link__icon,
+  .project-link--release .project-link__icon,
   .save-path-button {
     transition: none;
+  }
+
+  .project-link--star:is(:hover, :focus-visible) .project-link__icon,
+  .project-link--release:is(:hover, :focus-visible) .project-link__icon {
+    transform: none;
   }
 
   .save-check-icon,

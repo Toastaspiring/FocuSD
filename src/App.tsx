@@ -2333,7 +2333,7 @@ function LayoutEditor({
           <ExternalLink className="project-link__arrow" size={14} aria-hidden="true" />
         </a>
         <a
-          className="project-link"
+          className="project-link project-link--release"
           href="https://github.com/flyl1u/fly-island/releases/latest"
           target="_blank"
           rel="noopener noreferrer"
