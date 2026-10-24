@@ -100,6 +100,12 @@ The generated installers are placed in:
 
 You can also download the latest Windows x64 installers from [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest).
 
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Third-party dependencies and bundled assets retain their respective licenses. See the [font notices](src/assets/fonts/README.md) for bundled fonts.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">

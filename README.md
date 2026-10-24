@@ -102,6 +102,12 @@ pnpm tauri build
 
 也可以直接从 [GitHub Releases](https://github.com/flyl1u/fly-island/releases/latest) 下载 Windows x64 安装包。
 
+## 开源协议
+
+本项目采用 [MIT 协议](LICENSE)。
+
+第三方依赖和内置资源仍遵循各自的许可证。内置字体的许可信息见[字体说明](src/assets/fonts/README.md)。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=flyl1u%2Ffly-island&type=date&legend=top-left">
