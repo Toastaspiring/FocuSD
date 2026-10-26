@@ -8,6 +8,8 @@
   <p>A Windows desktop productivity app that brings tasks, clipboard history, music, AI status, quick translation, and notifications to the top of your screen.</p>
 
   <p>
+    <a href="https://island.flyliu.org/">Live Preview</a>
+    ·
     <a href="https://github.com/flyl1u/fly-island/releases/latest">Download Release</a>
     ·
     <a href="https://github.com/flyl1u/fly-island/issues">Report an Issue</a>

@@ -8,6 +8,8 @@
   <p>一款 Windows 桌面效率工具，在屏幕顶部集中管理待办、剪贴板、音乐、AI 状态、快捷翻译和消息提醒。</p>
 
   <p>
+    <a href="https://island.flyliu.org/">在线预览</a>
+    ·
     <a href="https://github.com/flyl1u/fly-island/releases/latest">下载 Release</a>
     ·
     <a href="https://github.com/flyl1u/fly-island/issues">反馈 Issue</a>
