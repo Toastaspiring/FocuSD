@@ -3,7 +3,7 @@
 
   <h1>Fly Island</h1>
 
-  <p><a href="README.md"><strong>简体中文</strong></a> · <a href="README.en.md">English</a></p>
+  <p><a href="README.en.md">English</a> · 中文</p>
 
   <p>一款 Windows 桌面效率工具，在屏幕顶部集中管理待办、剪贴板、音乐、AI 状态、快捷翻译和消息提醒。</p>
 

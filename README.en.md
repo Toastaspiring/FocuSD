@@ -3,7 +3,7 @@
 
   <h1>Fly Island</h1>
 
-  <p><a href="README.md">简体中文</a> · <a href="README.en.md"><strong>English</strong></a></p>
+  <p>English · <a href="README.md">中文</a></p>
 
   <p>A Windows desktop productivity app that brings tasks, clipboard history, music, AI status, quick translation, and notifications to the top of your screen.</p>
 
