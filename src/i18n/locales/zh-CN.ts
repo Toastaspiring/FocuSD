@@ -121,6 +121,7 @@ const zhCN: Translations = {
     imapHost: "IMAP 服务器",
     imapHostPlaceholder: "imap.example.com",
     imapPort: "端口",
+    configureInSettings: "请在「设置」中配置邮箱账户。",
     connect: "连接",
     inbox: "收件箱最近 20 封邮件",
     syncing: "同步中",

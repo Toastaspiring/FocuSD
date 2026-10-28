@@ -121,6 +121,7 @@ const en: Translations = {
     imapHost: "IMAP server",
     imapHostPlaceholder: "imap.example.com",
     imapPort: "Port",
+    configureInSettings: "Set up your mail account in Settings.",
     connect: "Connect",
     inbox: "Latest 20 inbox messages",
     syncing: "Syncing",

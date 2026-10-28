@@ -123,6 +123,7 @@ export type Translations = {
     imapHost: string;
     imapHostPlaceholder: string;
     imapPort: string;
+    configureInSettings: string;
     connect: string;
     inbox: string;
     syncing: string;

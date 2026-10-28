@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, ArrowRight, ArrowUpRight, AtSign, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Server, Unplug } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, AtSign, Check, ChevronDown, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Server, Unplug } from "lucide-react";
 import DOMPurify from "dompurify";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
@@ -261,6 +261,47 @@ function formatMailTime(time: number, locale: string) {
   return new Date(time).toLocaleString(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function MailProviderSelect({ value, disabled, onChange }: { value: MailProvider; disabled?: boolean; onChange: (provider: MailProvider) => void }) {
+  const t = useTranslation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const options: MailProvider[] = ["qq", "gmail", "custom"];
+  const label = (provider: MailProvider) => t.mail.providerNames[provider];
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
+  }, [open]);
+
+  return (
+    <div className="qq-mail-field qq-mail-field--select" ref={ref}>
+      <Server size={16} strokeWidth={1.8} aria-hidden="true" />
+      <button type="button" className="mail-provider-select__button" aria-haspopup="listbox" aria-expanded={open} aria-label={t.mail.provider} disabled={disabled} onClick={() => setOpen((value) => !value)}>
+        <span>{label(value)}</span>
+        <ChevronDown size={15} strokeWidth={2} className={`mail-provider-select__chevron${open ? " mail-provider-select__chevron--open" : ""}`} />
+      </button>
+      {open && (
+        <ul className="mail-provider-select__list" role="listbox" aria-label={t.mail.provider}>
+          {options.map((option) => (
+            <li key={option} role="option" aria-selected={option === value}>
+              <button type="button" className={`mail-provider-select__option${option === value ? " mail-provider-select__option--active" : ""}`} onClick={() => { onChange(option); setOpen(false); }}>
+                <span>{label(option)}</span>
+                {option === value && <Check size={14} strokeWidth={2.4} />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function MailConnectForm({ controller }: { controller: QQMailController }) {
   const { snapshot, busy, connect } = controller;
   const t = useTranslation();
@@ -281,7 +322,7 @@ function MailConnectForm({ controller }: { controller: QQMailController }) {
       void connect(email, authorizationCode, resolvedHost, resolvedPort).then((connected) => { if (connected) setAuthorizationCode(""); });
     }}>
       <div className="qq-mail-fields">
-        <label className="qq-mail-field"><Server size={16} strokeWidth={1.8} aria-hidden="true" /><select aria-label={t.mail.provider} value={provider} disabled={busy || snapshot.configured} onChange={(event) => setProvider(event.currentTarget.value as MailProvider)}><option value="qq">{t.mail.providerNames.qq}</option><option value="gmail">{t.mail.providerNames.gmail}</option><option value="custom">{t.mail.providerNames.custom}</option></select></label>
+        <MailProviderSelect value={provider} disabled={busy || snapshot.configured} onChange={setProvider} />
         <label className="qq-mail-field"><AtSign size={16} strokeWidth={1.8} aria-hidden="true" /><input aria-label={t.mail.email} type="email" autoComplete="username" placeholder={t.mail.emailPlaceholder} required maxLength={120} value={email} disabled={busy || snapshot.configured} onChange={(event) => setEmail(event.currentTarget.value)} /></label>
         {provider === "custom" && (
           <div className="qq-mail-field-row">
@@ -387,7 +428,7 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
       {snapshot.configured && <div className="qq-mail-account" title={`${snapshot.email} · ${t.mail.status[snapshot.status]}`}><span className="message-status" data-state={snapshot.status} role="status" aria-label={t.mail.status[snapshot.status]} /><span className="qq-mail-account__email">{snapshot.email}</span></div>}
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       {showForm ? (
-        <MailConnectForm controller={controller} />
+        <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qqMail" size={28} /></span><span>{t.mail.configureInSettings}</span></div>
       ) : (
         <>
           <div className="qq-panel__list qq-mail-list" ref={listRef} onScroll={(event) => { listScroll.current = event.currentTarget.scrollTop; }} role="list" aria-label={t.mail.inbox} aria-busy={snapshot.syncing}>

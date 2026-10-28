@@ -10,10 +10,18 @@
 .qq-mail-field > input:focus-visible { outline: none; }
 .qq-mail-field > input::placeholder { color: rgba(241, 246, 250, .4); }
 .qq-mail-field > input:disabled { opacity: .5; }
-.qq-mail-field > select { width: 100%; min-width: 0; padding: 13px 0; color: #f7f5ef; font: inherit; font-size: 12px; border: 0; background: transparent; cursor: pointer; appearance: none; -webkit-appearance: none; }
-.qq-mail-field > select:focus-visible { outline: none; }
-.qq-mail-field > select:disabled { opacity: .5; }
-.qq-mail-field > select option { color: #16181d; }
+.qq-mail-field--select { position: relative; }
+.mail-provider-select__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-width: 0; padding: 13px 0; color: #f7f5ef; font: inherit; font-size: 12px; background: transparent; border: 0; cursor: pointer; }
+.mail-provider-select__button:disabled { opacity: .5; cursor: default; }
+.mail-provider-select__button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-provider-select__button:focus-visible { outline: none; }
+.mail-provider-select__chevron { flex: 0 0 auto; color: rgba(241, 246, 250, .5); transition: transform 160ms ease; }
+.mail-provider-select__chevron--open { transform: rotate(180deg); }
+.mail-provider-select__list { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; margin: 0; padding: 5px; list-style: none; background: #1b1e24; border: 1px solid rgba(255, 255, 255, .12); border-radius: 12px; box-shadow: 0 14px 30px rgba(0, 0, 0, .5); }
+.mail-provider-select__option { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 11px; color: rgba(241, 246, 250, .8); font: inherit; font-size: 12px; text-align: left; background: transparent; border: 0; border-radius: 8px; cursor: pointer; transition: background 120ms ease, color 120ms ease; }
+.mail-provider-select__option:hover { background: rgba(255, 255, 255, .06); color: #f7f5ef; }
+.mail-provider-select__option--active { color: #8fd8ff; }
+.mail-provider-select__option > svg { flex: 0 0 auto; color: #8fd8ff; }
 .qq-mail-field-row { display: flex; gap: 10px; }
 .qq-mail-field--host { flex: 1 1 auto; min-width: 0; }
 .qq-mail-field--port { flex: 0 0 96px; padding: 0 12px; }
