@@ -261,13 +261,8 @@ function formatMailTime(time: number, locale: string) {
   return new Date(time).toLocaleString(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function QQMailPanel({ controller, navigation, onRead, onBack }: {
-  controller: QQMailController;
-  navigation: ReactNode;
-  onRead?: (message: MailMessage) => void;
-  onBack?: () => void;
-}) {
-  const { snapshot, busy, actionError, connect, setEnabled, refresh, disconnect, openMail, openHelp } = controller;
+function MailConnectForm({ controller }: { controller: QQMailController }) {
+  const { snapshot, busy, connect } = controller;
   const t = useTranslation();
   const [email, setEmail] = useState(snapshot.email ?? "");
   const [authorizationCode, setAuthorizationCode] = useState("");
@@ -276,6 +271,63 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
   const [customPort, setCustomPort] = useState(() => String(loadProviderPrefs().port));
   const resolvedHost = provider === "custom" ? customHost.trim() : MAIL_PROVIDER_PRESETS[provider].host;
   const resolvedPort = provider === "custom" ? Number(customPort) || 993 : MAIL_PROVIDER_PRESETS[provider].port;
+
+  useEffect(() => { if (snapshot.email) setEmail(snapshot.email); }, [snapshot.email]);
+
+  return (
+    <form className="qq-mail-form" onSubmit={(event) => {
+      event.preventDefault();
+      saveProviderPrefs({ provider, host: customHost, port: Number(customPort) || 993 });
+      void connect(email, authorizationCode, resolvedHost, resolvedPort).then((connected) => { if (connected) setAuthorizationCode(""); });
+    }}>
+      <div className="qq-mail-fields">
+        <label className="qq-mail-field"><Server size={16} strokeWidth={1.8} aria-hidden="true" /><select aria-label={t.mail.provider} value={provider} disabled={busy || snapshot.configured} onChange={(event) => setProvider(event.currentTarget.value as MailProvider)}><option value="qq">{t.mail.providerNames.qq}</option><option value="gmail">{t.mail.providerNames.gmail}</option><option value="custom">{t.mail.providerNames.custom}</option></select></label>
+        <label className="qq-mail-field"><AtSign size={16} strokeWidth={1.8} aria-hidden="true" /><input aria-label={t.mail.email} type="email" autoComplete="username" placeholder={t.mail.emailPlaceholder} required maxLength={120} value={email} disabled={busy || snapshot.configured} onChange={(event) => setEmail(event.currentTarget.value)} /></label>
+        {provider === "custom" && (
+          <div className="qq-mail-field-row">
+            <label className="qq-mail-field qq-mail-field--host"><Server size={16} strokeWidth={1.8} aria-hidden="true" /><input aria-label={t.mail.imapHost} type="text" autoComplete="off" spellCheck={false} placeholder={t.mail.imapHostPlaceholder} required maxLength={255} value={customHost} disabled={busy} onChange={(event) => setCustomHost(event.currentTarget.value)} /></label>
+            <label className="qq-mail-field qq-mail-field--port"><input aria-label={t.mail.imapPort} type="number" inputMode="numeric" min={1} max={65535} placeholder="993" value={customPort} disabled={busy} onChange={(event) => setCustomPort(event.currentTarget.value)} /></label>
+          </div>
+        )}
+        <label className="qq-mail-field"><KeyRound size={16} strokeWidth={1.8} aria-hidden="true" /><input aria-label={t.mail.authorizationCode} type="password" autoComplete="off" placeholder={t.mail.authorizationPlaceholder} required maxLength={256} value={authorizationCode} disabled={busy} onChange={(event) => setAuthorizationCode(event.currentTarget.value)} /></label>
+      </div>
+      <div className="qq-mail-form__actions">
+        <button className="message-action qq-mail-connect" type="submit" disabled={busy || !email.trim() || !authorizationCode.trim() || (provider === "custom" && !customHost.trim())}>{busy ? <LoaderCircle size={15} strokeWidth={1.8} className="qq-mail-spinning" /> : <ArrowRight size={15} strokeWidth={1.8} />}{busy ? t.common.connecting : t.mail.connect}</button>
+      </div>
+    </form>
+  );
+}
+
+export function MailAccountSettings({ controller }: { controller: QQMailController }) {
+  const { snapshot, busy, actionError, setEnabled, disconnect } = controller;
+  const t = useTranslation();
+  if (!isTauri()) return <p className="mail-settings__hint">{t.mail.desktopConnect}</p>;
+  const showForm = !snapshot.configured || snapshot.status === "authRequired";
+  const error = actionError || snapshot.error;
+  return (
+    <div className="mail-settings">
+      {snapshot.configured && (
+        <div className="mail-settings__account">
+          <span className="message-status" data-state={snapshot.status} role="status" aria-label={t.mail.status[snapshot.status]} />
+          <span className="mail-settings__email" title={snapshot.email ?? undefined}>{snapshot.email}</span>
+          <button className="icon-button message-receiver-toggle" type="button" role="switch" aria-checked={snapshot.enabled} aria-label={t.mail.receive} title={snapshot.enabled ? t.mail.pause : t.mail.resume} disabled={busy || snapshot.status === "authRequired"} onClick={() => void setEnabled(!snapshot.enabled)}><Power size={15} strokeWidth={1.8} /></button>
+          <button className="icon-button" type="button" title={t.mail.disconnect} aria-label={t.mail.disconnectLabel} disabled={busy} onClick={() => void disconnect()}><Unplug size={16} strokeWidth={1.8} /></button>
+        </div>
+      )}
+      {error && <p className="qq-panel__error" role="alert">{error}</p>}
+      {showForm && <MailConnectForm controller={controller} />}
+    </div>
+  );
+}
+
+export function QQMailPanel({ controller, navigation, onRead, onBack }: {
+  controller: QQMailController;
+  navigation: ReactNode;
+  onRead?: (message: MailMessage) => void;
+  onBack?: () => void;
+}) {
+  const { snapshot, busy, actionError, setEnabled, refresh, disconnect, openMail, openHelp } = controller;
+  const t = useTranslation();
   const showForm = !snapshot.configured || snapshot.status === "authRequired";
   const error = actionError || snapshot.error;
   const listRef = useRef<HTMLDivElement>(null);
@@ -285,7 +337,6 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
   const html = useMemo(() => content?.contentType === "text/html" ? sanitizeMailHtml(content.content) : "", [content]);
   const readerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { if (snapshot.email) setEmail(snapshot.email); }, [snapshot.email]);
   useLayoutEffect(() => {
     if (!selectedMail && listRef.current) {
       listRef.current.scrollTop = listScroll.current;
@@ -330,32 +381,13 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
           {showForm && <button className="icon-button" type="button" title={t.mail.help} aria-label={t.mail.helpLabel} onClick={() => void openHelp()}><CircleHelp size={16} strokeWidth={1.8} /></button>}
           <button className="icon-button" type="button" title={t.mail.open} aria-label={t.mail.openLabel} onClick={() => void openMail()}><ArrowUpRight size={16} strokeWidth={1.8} /></button>
           {snapshot.configured && <button className="icon-button" type="button" title={snapshot.lastSyncedAt === null ? t.mail.refresh : t.mail.lastSynced(formatMailTime(snapshot.lastSyncedAt, t.localeTag))} aria-label={t.mail.refreshLabel} disabled={busy || snapshot.syncing || !snapshot.enabled || snapshot.status === "authRequired"} onClick={() => void refresh()}><RefreshCw size={16} strokeWidth={1.8} className={snapshot.syncing ? "qq-mail-spinning" : undefined} /></button>}
-          {snapshot.configured && <button className="icon-button" type="button" title={t.mail.disconnect} aria-label={t.mail.disconnectLabel} disabled={busy} onClick={() => void disconnect().then((disconnected) => { if (disconnected) setAuthorizationCode(""); })}><Unplug size={16} strokeWidth={1.8} /></button>}
+          {snapshot.configured && <button className="icon-button" type="button" title={t.mail.disconnect} aria-label={t.mail.disconnectLabel} disabled={busy} onClick={() => void disconnect()}><Unplug size={16} strokeWidth={1.8} /></button>}
         </div>
       </header>
       {snapshot.configured && <div className="qq-mail-account" title={`${snapshot.email} · ${t.mail.status[snapshot.status]}`}><span className="message-status" data-state={snapshot.status} role="status" aria-label={t.mail.status[snapshot.status]} /><span className="qq-mail-account__email">{snapshot.email}</span></div>}
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       {showForm ? (
-        <form className="qq-mail-form" onSubmit={(event) => {
-          event.preventDefault();
-          saveProviderPrefs({ provider, host: customHost, port: Number(customPort) || 993 });
-          void connect(email, authorizationCode, resolvedHost, resolvedPort).then((connected) => { if (connected) setAuthorizationCode(""); });
-        }}>
-          <div className="qq-mail-fields">
-            <label className="qq-mail-field"><Server size={16} strokeWidth={1.8} aria-hidden="true" /><select id="qq-mail-provider" aria-label={t.mail.provider} value={provider} disabled={busy || snapshot.configured} onChange={(event) => setProvider(event.currentTarget.value as MailProvider)}><option value="qq">{t.mail.providerNames.qq}</option><option value="gmail">{t.mail.providerNames.gmail}</option><option value="custom">{t.mail.providerNames.custom}</option></select></label>
-            <label className="qq-mail-field"><AtSign size={16} strokeWidth={1.8} aria-hidden="true" /><input id="qq-mail-email" aria-label={t.mail.email} type="email" autoComplete="username" placeholder={t.mail.emailPlaceholder} required maxLength={120} value={email} disabled={busy || snapshot.configured} onChange={(event) => setEmail(event.currentTarget.value)} /></label>
-            {provider === "custom" && (
-              <div className="qq-mail-field-row">
-                <label className="qq-mail-field qq-mail-field--host"><Server size={16} strokeWidth={1.8} aria-hidden="true" /><input id="qq-mail-host" aria-label={t.mail.imapHost} type="text" autoComplete="off" spellCheck={false} placeholder={t.mail.imapHostPlaceholder} required maxLength={255} value={customHost} disabled={busy} onChange={(event) => setCustomHost(event.currentTarget.value)} /></label>
-                <label className="qq-mail-field qq-mail-field--port"><input id="qq-mail-port" aria-label={t.mail.imapPort} type="number" inputMode="numeric" min={1} max={65535} placeholder="993" value={customPort} disabled={busy} onChange={(event) => setCustomPort(event.currentTarget.value)} /></label>
-              </div>
-            )}
-            <label className="qq-mail-field"><KeyRound size={16} strokeWidth={1.8} aria-hidden="true" /><input id="qq-mail-code" aria-label={t.mail.authorizationCode} type="password" autoComplete="off" placeholder={t.mail.authorizationPlaceholder} required maxLength={256} value={authorizationCode} disabled={busy} onChange={(event) => setAuthorizationCode(event.currentTarget.value)} /></label>
-          </div>
-          <div className="qq-mail-form__actions">
-            <button className="message-action qq-mail-connect" type="submit" disabled={busy || !email.trim() || !authorizationCode.trim() || (provider === "custom" && !customHost.trim())}>{busy ? <LoaderCircle size={15} strokeWidth={1.8} className="qq-mail-spinning" /> : <ArrowRight size={15} strokeWidth={1.8} />}{busy ? t.common.connecting : t.mail.connect}</button>
-          </div>
-        </form>
+        <MailConnectForm controller={controller} />
       ) : (
         <>
           <div className="qq-panel__list qq-mail-list" ref={listRef} onScroll={(event) => { listScroll.current = event.currentTarget.scrollTop; }} role="list" aria-label={t.mail.inbox} aria-busy={snapshot.syncing}>

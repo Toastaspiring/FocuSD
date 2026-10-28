@@ -59,7 +59,7 @@ import {
   useWeChatReminders,
   type WeChatRemindersController,
 } from "./WeChatReminders";
-import { useQQMail, type QQMailController } from "./QQMail";
+import { MailAccountSettings, useQQMail, type QQMailController } from "./QQMail";
 import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { CollapsedMessageContent } from "./CollapsedMessageContent";
@@ -1834,6 +1834,7 @@ function LayoutEditor({
   settings,
   qqNotifications,
   wechatReminders,
+  qqMail,
   clipboardSettings,
   saveDirectoryDraft,
   savePathState,
@@ -1865,6 +1866,7 @@ function LayoutEditor({
   settings: IslandSettings;
   qqNotifications: QQNotificationsController;
   wechatReminders: WeChatRemindersController;
+  qqMail: QQMailController;
   clipboardSettings: ClipboardHistorySettings;
   saveDirectoryDraft: string;
   savePathState: SavePathState;
@@ -2148,6 +2150,7 @@ function LayoutEditor({
         <div className="settings-section__header"><span>{t.settings.messageReception}</span></div>
         <QQNotificationControls controller={qqNotifications} />
         <WeChatReminderControls controller={wechatReminders} />
+        <MailAccountSettings controller={qqMail} />
       </section>
 
       <section className="settings-section settings-section--todo">
@@ -5996,6 +5999,7 @@ function IslandApp({
             settings={settings}
             qqNotifications={qqNotifications}
             wechatReminders={wechatReminders}
+            qqMail={qqMail}
             clipboardSettings={clipboardHistory.settings}
             saveDirectoryDraft={saveDirectoryDraft}
             savePathState={savePathState}

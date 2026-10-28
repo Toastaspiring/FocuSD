@@ -19,6 +19,11 @@
 .qq-mail-field--port { flex: 0 0 96px; padding: 0 12px; }
 .qq-mail-field--port > input { text-align: center; }
 .qq-mail-form__actions { display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; gap: 10px; }
+.mail-settings { display: flex; flex-direction: column; gap: 10px; }
+.mail-settings__hint { margin: 0; color: rgba(241, 246, 250, .5); font-size: 12px; }
+.mail-settings__account { display: flex; align-items: center; gap: 8px; }
+.mail-settings__email { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #f7f5ef; font-size: 12px; font-weight: 600; }
+.mail-settings .qq-mail-form { width: 100%; margin: 0; padding: 0; overflow: visible; }
 .qq-mail-connect { min-width: 88px; min-height: 32px; }
 .qq-mail-list { padding: 0; }
 .qq-mail-item .qq-panel__item-heading strong { display: flex; align-items: center; gap: 7px; color: rgba(241, 246, 250, .65); }
