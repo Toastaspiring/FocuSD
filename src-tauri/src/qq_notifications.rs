@@ -55,6 +55,7 @@ static SERVICE: OnceLock<Arc<NotificationService>> = OnceLock::new();
 #[serde(rename_all = "camelCase")]
 pub struct QQNotification {
     id: String,
+    app: String,
     title: String,
     body: String,
     created_at: i64,
@@ -514,9 +515,18 @@ fn read_notifications() -> Result<(NotificationStatus, Vec<QQNotification>), Str
 fn read_qq_notification(
     notification: &UserNotification,
 ) -> windows::core::Result<Option<QQNotification>> {
-    if notification.AppInfo()?.AppUserModelId()? != QQ_APP_ID {
-        return Ok(None);
-    }
+    let app_info = notification.AppInfo()?;
+    let aumid = app_info
+        .AppUserModelId()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_default();
+    let app = app_info
+        .DisplayInfo()
+        .and_then(|info| info.DisplayName())
+        .map(|value| value.to_string_lossy())
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| friendly_app_label(&aumid));
     let id = notification.Id()?;
     let ticks = notification.CreationTime()?.UniversalTime;
     let mut parts = Vec::new();
@@ -550,14 +560,39 @@ fn read_qq_notification(
         .first()
         .filter(|text| !text.trim().is_empty())
         .cloned()
-        .unwrap_or_else(|| "QQ".into());
+        .unwrap_or_else(|| app.clone());
     let body = parts.iter().skip(1).cloned().collect::<Vec<_>>().join("\n");
     Ok(Some(QQNotification {
-        id: format!("QQ:{id}:{ticks}"),
+        id: format!("{aumid}:{id}:{ticks}"),
+        app: app.chars().take(80).collect(),
         title: title.chars().take(120).collect(),
         body: body.chars().take(1000).collect(),
         created_at: ticks / 10_000 - 11_644_473_600_000,
     }))
+}
+
+/// Turns a raw AppUserModelId into a short, human-friendly app label when the
+/// notification platform does not provide a display name.
+fn friendly_app_label(aumid: &str) -> String {
+    let trimmed = aumid.trim();
+    if trimmed.is_empty() {
+        return "App".to_string();
+    }
+    // Packaged apps use "Family!AppId"; take the family name's last segment.
+    let family = trimmed.split('!').next().unwrap_or(trimmed);
+    let candidate = family
+        .rsplit(['.', '\\', '/'])
+        .find(|segment| !segment.trim().is_empty())
+        .unwrap_or(family);
+    let candidate = candidate.strip_suffix(".exe").unwrap_or(candidate);
+    if candidate.is_empty() {
+        return trimmed.to_string();
+    }
+    let mut chars = candidate.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => trimmed.to_string(),
+    }
 }
 
 fn qq_executable() -> Result<PathBuf, String> {
@@ -797,6 +832,7 @@ mod tests {
         let snapshot = NotificationSnapshot {
             items: vec![QQNotification {
                 id: "private-id".into(),
+                app: "private-app".into(),
                 title: "private-sender".into(),
                 body: "private-message".into(),
                 created_at: 123,
@@ -1014,6 +1050,7 @@ mod tests {
     fn notice(id: u32, body: &str) -> QQNotification {
         QQNotification {
             id: id.to_string(),
+            app: "App".into(),
             title: "QQ".into(),
             body: body.into(),
             created_at: id as i64,

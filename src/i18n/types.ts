@@ -20,6 +20,7 @@ export type Translations = {
     sources: string;
     wechat: string;
     mail: string;
+    notifications: string;
     qqMail: string;
     qqNotifications: string;
     wechatReminders: string;

@@ -2,7 +2,7 @@ import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowUpRight, KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
 import "./QQNotifications.css";
@@ -12,6 +12,7 @@ const ACCESS_REQUESTED_KEY = "focusd-island-qq-notification-access-requested";
 
 export type QQNotification = {
   id: string;
+  app: string;
   title: string;
   body: string;
   createdAt: number;
@@ -198,7 +199,7 @@ export function QQNotificationControls({ controller, compact = false }: { contro
 }
 
 export function QQNotificationPanel({ controller, navigation }: { controller: QQNotificationsController; navigation: ReactNode }) {
-  const { snapshot, busy, actionError, refresh, clear, openQQ } = controller;
+  const { snapshot, busy, actionError, refresh, clear } = controller;
   const t = useTranslation();
   const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? t.qq.status[snapshot.status] : null);
   return (
@@ -207,7 +208,6 @@ export function QQNotificationPanel({ controller, navigation }: { controller: QQ
         {navigation}
         <div className="qq-panel__toolbar">
           <QQNotificationControls controller={controller} compact />
-          <button className="icon-button" type="button" title={t.qq.open} aria-label={t.qq.open} disabled={busy} onClick={() => void openQQ()}><ArrowUpRight size={16} strokeWidth={1.8} /></button>
           <button className="icon-button" type="button" title={t.common.refresh} aria-label={t.qq.refresh} disabled={busy} onClick={() => void refresh()}><RefreshCw size={16} strokeWidth={1.8} /></button>
           <button className="icon-button" type="button" title={t.common.clear} aria-label={t.qq.clear} disabled={busy || snapshot.items.length === 0} onClick={() => void clear()}><Trash2 size={16} strokeWidth={1.8} /></button>
         </div>
@@ -218,10 +218,11 @@ export function QQNotificationPanel({ controller, navigation }: { controller: QQ
           <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>{t.common.noMessages}</span></div>
         ) : snapshot.items.map((item) => (
           <article className="qq-panel__item" key={item.id} role="listitem">
-            <button type="button" disabled={busy} onClick={() => void openQQ()} aria-label={t.qq.openNotification(item.title)}>
+            <div className="qq-notification-item">
+              {item.app && <span className="qq-notification-item__app">{item.app}</span>}
               <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
               {item.body && <p>{item.body}</p>}
-            </button>
+            </div>
           </article>
         ))}
       </div>

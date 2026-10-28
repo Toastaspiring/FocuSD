@@ -18,6 +18,7 @@ const en: Translations = {
     sources: "Message sources",
     wechat: "WeChat",
     mail: "Mail",
+    notifications: "Notifs",
     qqMail: "QQ Mail",
     qqNotifications: "QQ notifications",
     wechatReminders: "WeChat reminders",
