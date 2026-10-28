@@ -69,6 +69,7 @@ input,
 
 .stage--font-pixel .island__brand,
 .stage--font-pixel .island__active-task,
+.stage--font-pixel .island__agent-running,
 .stage--font-pixel .island__todo-count {
   font-size: 14px;
   font-weight: 400;
@@ -504,6 +505,26 @@ input,
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.island__agent-running {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--task-text-color);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.island__agent-running--running {
+  color: #ff4d5e;
+}
+
+.island__agent-running--attention {
+  color: #ffd166;
 }
 
 .island__quiet-button {

@@ -264,6 +264,7 @@ type IslandShellProps = {
   mediaState: MediaState;
   agentVisualState: AgentVisualState;
   agentStatusLabel: string;
+  agentProviderLabel: string | null;
   onOpenPage: (page: IslandPage) => void;
   onWindowDragStart: () => void;
   onCollapse: () => void;
@@ -479,6 +480,24 @@ function getAgentStatusLabel(snapshot: AgentStatusSnapshot, t: Translations) {
   }
 
   return t.agent.idleOrDone;
+}
+
+function getActiveAgentProviderLabel(snapshot: AgentStatusSnapshot): string | null {
+  const attentionProvider = AGENT_PROVIDERS.find((provider) =>
+    isAgentAttentionPhase(snapshot[provider].phase),
+  );
+  if (attentionProvider) {
+    return AGENT_PROVIDER_LABELS[attentionProvider];
+  }
+
+  const runningProvider = AGENT_PROVIDERS.find(
+    (provider) => snapshot[provider].phase === "running",
+  );
+  if (runningProvider) {
+    return AGENT_PROVIDER_LABELS[runningProvider];
+  }
+
+  return null;
 }
 
 function getAgentPhaseLabel(phase: AgentTaskPhase, t: Translations) {
@@ -1090,6 +1109,7 @@ export function IslandShell({
   mediaState,
   agentVisualState,
   agentStatusLabel,
+  agentProviderLabel,
   onOpenPage,
   onWindowDragStart,
   onCollapse,
@@ -1148,9 +1168,11 @@ export function IslandShell({
   const collapsedLabel = showCollapsedText
     ? collapsedTaskTitle
       ? t.messages.collapsedTask(collapsedTaskTitle)
-      : collapsedTodoCount !== null
-        ? t.island.pendingTodos(collapsedTodoCount)
-        : "fly-island"
+      : agentVisualState !== "idle"
+        ? agentStatusLabel
+        : collapsedTodoCount !== null
+          ? t.island.pendingTodos(collapsedTodoCount)
+          : "fly-island"
     : "fly-island";
 
   useEffect(
@@ -1363,12 +1385,23 @@ export function IslandShell({
                   {collapsedTaskTitle}
                 </span>
               )}
-              {showCollapsedText && !collapsedTaskTitle && collapsedTodoCount !== null && (
-                <span className="island__todo-count">
+              {showCollapsedText && !collapsedTaskTitle && agentProviderLabel && (
+                <span
+                  className={`island__agent-running island__agent-running--${agentVisualState}`}
+                >
                   {showTitle ? "· " : ""}
-                  {t.island.pendingTodos(collapsedTodoCount)}
+                  {agentProviderLabel}
                 </span>
               )}
+              {showCollapsedText &&
+                !collapsedTaskTitle &&
+                !agentProviderLabel &&
+                collapsedTodoCount !== null && (
+                  <span className="island__todo-count">
+                    {showTitle ? "· " : ""}
+                    {t.island.pendingTodos(collapsedTodoCount)}
+                  </span>
+                )}
             </CollapsedMessageContent>
           </button>
           {qqMail.preview !== null && (
@@ -4262,6 +4295,18 @@ function IslandApp({
   const mediaTargetRef = useRef<string | null>(null);
   const [agentStatus, setAgentStatus] =
     useState<AgentStatusSnapshot>(DEFAULT_AGENT_STATUS);
+  const agentVisualState = useMemo(
+    () => getAgentVisualState(agentStatus),
+    [agentStatus],
+  );
+  const agentStatusLabel = useMemo(
+    () => getAgentStatusLabel(agentStatus, t),
+    [agentStatus, t],
+  );
+  const agentProviderLabel = useMemo(
+    () => getActiveAgentProviderLabel(agentStatus),
+    [agentStatus],
+  );
   const isRefreshingAgentStatus = useRef(false);
   const isRefreshingMediaState = useRef(false);
   const isRefreshingAudioLevel = useRef(false);
@@ -4334,12 +4379,23 @@ function IslandApp({
     () =>
       getCollapsedIslandWidth(
         settings.showCollapsedText
-          ? collapsedTaskTitle ?? (collapsedTodoCount !== null
-            ? t.island.pendingTodos(collapsedTodoCount)
-            : settings.showTitle ? "fly-island" : "")
+          ? collapsedTaskTitle ??
+              agentProviderLabel ??
+              (collapsedTodoCount !== null
+                ? t.island.pendingTodos(collapsedTodoCount)
+                : settings.showTitle
+                  ? "fly-island"
+                  : "")
           : "",
       ),
-    [collapsedTaskTitle, collapsedTodoCount, settings.showCollapsedText, settings.showTitle, t],
+    [
+      agentProviderLabel,
+      collapsedTaskTitle,
+      collapsedTodoCount,
+      settings.showCollapsedText,
+      settings.showTitle,
+      t,
+    ],
   );
   const isTodoArchivePage =
     page === "todo" && (todoPageMode === "archive" || todoPageMode === "review");
@@ -5892,15 +5948,6 @@ function IslandApp({
     };
   }, [collapseIsland, mode]);
 
-  const agentVisualState = useMemo(
-    () => getAgentVisualState(agentStatus),
-    [agentStatus],
-  );
-  const agentStatusLabel = useMemo(
-    () => getAgentStatusLabel(agentStatus, t),
-    [agentStatus, t],
-  );
-
   const openTranslator = useCallback(() => {
     void invoke("toggle_translation_window").catch((error) => {
       console.error("Failed to open translation", error);
@@ -5927,6 +5974,7 @@ function IslandApp({
         mediaState={mediaState}
         agentVisualState={agentVisualState}
         agentStatusLabel={agentStatusLabel}
+        agentProviderLabel={agentProviderLabel}
         onOpenPage={openIslandPage}
         onWindowDragStart={startIslandDrag}
         onCollapse={collapseIsland}
