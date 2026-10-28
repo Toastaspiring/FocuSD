@@ -10,6 +10,14 @@
 .qq-mail-field > input:focus-visible { outline: none; }
 .qq-mail-field > input::placeholder { color: rgba(241, 246, 250, .4); }
 .qq-mail-field > input:disabled { opacity: .5; }
+.qq-mail-field > select { width: 100%; min-width: 0; padding: 13px 0; color: #f7f5ef; font: inherit; font-size: 12px; border: 0; background: transparent; cursor: pointer; appearance: none; -webkit-appearance: none; }
+.qq-mail-field > select:focus-visible { outline: none; }
+.qq-mail-field > select:disabled { opacity: .5; }
+.qq-mail-field > select option { color: #16181d; }
+.qq-mail-field-row { display: flex; gap: 10px; }
+.qq-mail-field--host { flex: 1 1 auto; min-width: 0; }
+.qq-mail-field--port { flex: 0 0 96px; padding: 0 12px; }
+.qq-mail-field--port > input { text-align: center; }
 .qq-mail-form__actions { display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; gap: 10px; }
 .qq-mail-connect { min-width: 88px; min-height: 32px; }
 .qq-mail-list { padding: 0; }

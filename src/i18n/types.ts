@@ -113,6 +113,15 @@ export type Translations = {
     emailPlaceholder: string;
     authorizationCode: string;
     authorizationPlaceholder: string;
+    provider: string;
+    providerNames: {
+      qq: string;
+      gmail: string;
+      custom: string;
+    };
+    imapHost: string;
+    imapHostPlaceholder: string;
+    imapPort: string;
     connect: string;
     inbox: string;
     syncing: string;

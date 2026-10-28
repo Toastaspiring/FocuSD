@@ -2,7 +2,7 @@ use imap::{types::Flag, Session};
 use imap_proto::types::{BodyContentCommon, BodyStructure, MessageSection, SectionPath};
 use keyring::{Entry, Error as KeyringError};
 use mailparse::MailHeaderMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
     net::{TcpStream, ToSocketAddrs},
@@ -12,7 +12,8 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-const HOST: &str = "imap.qq.com";
+const DEFAULT_HOST: &str = "imap.qq.com";
+const DEFAULT_PORT: u16 = 993;
 const EVENT: &str = "qq-mail-changed";
 const CREDENTIAL_SERVICE: &str = "com.focusd.island.qq-mail";
 const MAX_ITEMS: u32 = 20;
@@ -22,6 +23,13 @@ const HEADER_QUERY: &str = "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER]<0.65536>)"
 const MAX_BODY_BYTES: u32 = 512 * 1024;
 const MAX_MIME_BYTES: usize = 65_536;
 static SERVICE: OnceLock<Arc<MailService>> = OnceLock::new();
+
+#[derive(Clone)]
+struct MailCredential {
+    host: String,
+    port: u16,
+    secret: String,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,14 +123,14 @@ impl MailFailure {
     fn network() -> Self {
         Self {
             authentication: false,
-            message: "无法同步 QQ 邮箱，请检查网络或稍后重试。",
+            message: "无法同步邮箱，请检查网络或稍后重试。",
         }
     }
 
     fn authentication() -> Self {
         Self {
             authentication: true,
-            message: "QQ 邮箱拒绝了连接，请确认已开启 IMAP，并重新输入邮箱授权码。",
+            message: "邮箱服务器拒绝了连接，请确认已开启 IMAP，并使用正确的授权码或应用专用密码。",
         }
     }
 }
@@ -215,7 +223,7 @@ enum Work {
     Connect {
         generation: u64,
         email: String,
-        secret: String,
+        credential: MailCredential,
         reply: Reply,
     },
     Refresh {
@@ -283,7 +291,7 @@ impl MailService {
         &self,
         generation: u64,
         email: &str,
-        secret: Option<&str>,
+        credential: Option<&MailCredential>,
     ) -> Result<MailSnapshot, String> {
         {
             let state = self.lock()?;
@@ -291,10 +299,10 @@ impl MailService {
                 return Err("邮箱连接已取消。".into());
             }
         }
-        let result = match secret {
-            Some(secret) => fetch_remote(email, secret),
-            None => match read_secret(email) {
-                Ok(Some(secret)) => fetch_remote(email, &secret),
+        let result = match credential {
+            Some(credential) => fetch_remote(email, credential),
+            None => match read_credential(email) {
+                Ok(Some(credential)) => fetch_remote(email, &credential),
                 Ok(None) => Err(MailFailure::authentication()),
                 Err(_) => Err(MailFailure {
                     authentication: true,
@@ -307,17 +315,11 @@ impl MailService {
             return Err("邮箱连接已取消。".into());
         }
         let result = result.and_then(|inbox| {
-            if let Some(secret) = secret {
-                credential(email)
-                    .and_then(|entry| {
-                        entry
-                            .set_password(secret)
-                            .map_err(|_| "无法保存邮箱凭据。".into())
-                    })
-                    .map_err(|_| MailFailure {
-                        authentication: false,
-                        message: "无法保存到 Windows 凭据管理器，请重试连接。",
-                    })?;
+            if let Some(credential) = credential {
+                save_credential(email, credential).map_err(|_| MailFailure {
+                    authentication: false,
+                    message: "无法保存到 Windows 凭据管理器，请重试连接。",
+                })?;
             }
             Ok(inbox)
         });
@@ -353,9 +355,9 @@ impl MailService {
             Ok(())
         };
         current()?;
-        let secret = read_secret(email)?.ok_or("未找到邮箱授权码，请重新连接。")?;
+        let credential = read_credential(email)?.ok_or("未找到邮箱凭据，请重新连接。")?;
         let mut session =
-            open_session(email, &secret).map_err(|failure| failure.message.to_string())?;
+            open_session(email, &credential).map_err(|failure| failure.message.to_string())?;
         let result = fetch_content(&mut session, message_id);
         let _ = session.logout();
         current()?;
@@ -400,10 +402,10 @@ fn worker(service: Arc<MailService>, receiver: mpsc::Receiver<Work>) {
             Ok(Work::Connect {
                 generation,
                 email,
-                secret,
+                credential,
                 reply,
             }) => {
-                let _ = reply.send(service.sync(generation, &email, Some(&secret)));
+                let _ = reply.send(service.sync(generation, &email, Some(&credential)));
             }
             Ok(Work::Refresh { generation, reply }) => {
                 let email = service
@@ -443,12 +445,17 @@ pub fn get_qq_mail_state() -> Result<MailSnapshot, String> {
 pub async fn connect_qq_mail(
     email: String,
     authorization_code: String,
+    host: Option<String>,
+    port: Option<u16>,
 ) -> Result<MailSnapshot, String> {
     let email = normalize_email(&email)?;
     let secret = authorization_code.trim().to_string();
     if secret.is_empty() || secret.len() > 256 || secret.chars().any(char::is_control) {
-        return Err("请输入 QQ 邮箱设置中生成的授权码。".into());
+        return Err("请输入邮箱 IMAP 的授权码或应用专用密码。".into());
     }
+    let host = normalize_host(host.as_deref().unwrap_or(DEFAULT_HOST))?;
+    let port = normalize_port(port.unwrap_or(DEFAULT_PORT))?;
+    let credential = MailCredential { host, port, secret };
     let service = service()?;
     let (generation, snapshot) = {
         let mut state = service.lock()?;
@@ -476,7 +483,7 @@ pub async fn connect_qq_mail(
         .send(Work::Connect {
             generation,
             email,
-            secret,
+            credential,
             reply,
         })
         .map_err(|_| "QQ 邮箱服务不可用。".to_string())?;
@@ -503,7 +510,7 @@ pub async fn set_qq_mail_enabled(email: String, enabled: bool) -> Result<MailSna
         {
             return Ok(state.snapshot.clone());
         }
-        let configured = read_secret(&email)?.is_some();
+        let configured = read_credential(&email)?.is_some();
         state.invalidate();
         state.snapshot.email = Some(email);
         state.snapshot.configured = configured;
@@ -635,11 +642,46 @@ fn credential(email: &str) -> Result<Entry, String> {
     Entry::new(CREDENTIAL_SERVICE, email).map_err(|_| "无法访问 Windows 邮箱凭据。".into())
 }
 
-fn read_secret(email: &str) -> Result<Option<String>, String> {
+fn read_credential(email: &str) -> Result<Option<MailCredential>, String> {
     match credential(email)?.get_password() {
-        Ok(secret) => Ok(Some(secret)),
+        Ok(stored) => Ok(Some(parse_stored_credential(&stored))),
         Err(KeyringError::NoEntry) => Ok(None),
         Err(_) => Err("无法读取 Windows 邮箱凭据。".into()),
+    }
+}
+
+fn save_credential(email: &str, credential_value: &MailCredential) -> Result<(), String> {
+    let stored = serde_json::json!({
+        "host": credential_value.host,
+        "port": credential_value.port,
+        "secret": credential_value.secret,
+    })
+    .to_string();
+    credential(email)?
+        .set_password(&stored)
+        .map_err(|_| "无法保存邮箱凭据。".into())
+}
+
+fn parse_stored_credential(stored: &str) -> MailCredential {
+    #[derive(Deserialize)]
+    struct Stored {
+        host: String,
+        port: u16,
+        secret: String,
+    }
+
+    match serde_json::from_str::<Stored>(stored) {
+        // Legacy entries stored the bare secret string for QQ Mail.
+        Ok(parsed) => MailCredential {
+            host: parsed.host,
+            port: parsed.port,
+            secret: parsed.secret,
+        },
+        Err(_) => MailCredential {
+            host: DEFAULT_HOST.to_string(),
+            port: DEFAULT_PORT,
+            secret: stored.to_string(),
+        },
     }
 }
 
@@ -651,17 +693,56 @@ fn delete_secret(email: &str) -> Result<(), String> {
 }
 
 fn normalize_email(email: &str) -> Result<String, String> {
-    let email = email.trim().to_ascii_lowercase();
-    let local = email.strip_suffix("@qq.com").unwrap_or("");
-    if local.is_empty()
-        || local.len() > 64
-        || !local
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._+-".contains(&byte))
+    let email = email.trim();
+    if email.is_empty()
+        || email.len() > 254
+        || email.chars().any(|ch| ch.is_control() || ch.is_whitespace())
     {
-        return Err("请输入有效的 @qq.com 邮箱地址。".into());
+        return Err("请输入有效的邮箱地址。".into());
     }
-    Ok(email)
+    let (local, domain) = email.split_once('@').ok_or("请输入有效的邮箱地址。")?;
+    let local_ok = !local.is_empty()
+        && local.len() <= 64
+        && local
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._+-".contains(&byte));
+    let domain_ok = !domain.is_empty()
+        && domain.len() <= 255
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && !domain.contains("..")
+        && domain
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-".contains(&byte));
+    if !local_ok || !domain_ok {
+        return Err("请输入有效的邮箱地址。".into());
+    }
+    Ok(email.to_ascii_lowercase())
+}
+
+fn normalize_host(host: &str) -> Result<String, String> {
+    let host = host.trim().to_ascii_lowercase();
+    if host.is_empty()
+        || host.len() > 255
+        || !host.contains('.')
+        || host.starts_with('.')
+        || host.ends_with('.')
+        || host.contains("..")
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b".-".contains(&byte))
+    {
+        return Err("请输入有效的 IMAP 服务器地址。".into());
+    }
+    Ok(host)
+}
+
+fn normalize_port(port: u16) -> Result<u16, String> {
+    if port == 0 {
+        return Err("请输入有效的 IMAP 端口。".into());
+    }
+    Ok(port)
 }
 
 fn retry_delay(failures: u32) -> Duration {
@@ -686,8 +767,8 @@ fn login_failure(error: imap::Error) -> MailFailure {
     }
 }
 
-fn fetch_remote(email: &str, secret: &str) -> Result<Inbox, MailFailure> {
-    let mut session = open_session(email, secret)?;
+fn fetch_remote(email: &str, credential: &MailCredential) -> Result<Inbox, MailFailure> {
+    let mut session = open_session(email, credential)?;
     let result = fetch_inbox(&mut session);
     let _ = session.logout();
     result
@@ -695,10 +776,10 @@ fn fetch_remote(email: &str, secret: &str) -> Result<Inbox, MailFailure> {
 
 fn open_session(
     email: &str,
-    secret: &str,
+    credential: &MailCredential,
 ) -> Result<Session<native_tls::TlsStream<TcpStream>>, MailFailure> {
     let mut stream = None;
-    let addresses = (HOST, 993)
+    let addresses = (credential.host.as_str(), credential.port)
         .to_socket_addrs()
         .map_err(|_| MailFailure::network())?;
     for address in addresses {
@@ -716,12 +797,12 @@ fn open_session(
         .map_err(|_| MailFailure::network())?;
     let tls = native_tls::TlsConnector::new().map_err(|_| MailFailure::network())?;
     let stream = tls
-        .connect(HOST, stream)
+        .connect(credential.host.as_str(), stream)
         .map_err(|_| MailFailure::network())?;
     let mut client = imap::Client::new(stream);
     client.read_greeting().map_err(|_| MailFailure::network())?;
     client
-        .login(email, secret)
+        .login(email, &credential.secret)
         .map_err(|(error, _)| login_failure(error))
 }
 
@@ -997,16 +1078,28 @@ mod tests {
     }
 
     #[test]
-    fn validates_qq_addresses_and_rejects_other_hosts_or_commands() {
+    fn normalizes_addresses_across_providers_and_rejects_injection() {
         assert_eq!(normalize_email(" User@QQ.COM ").unwrap(), "user@qq.com");
+        assert_eq!(normalize_email("Me.Name+tag@Gmail.com").unwrap(), "me.name+tag@gmail.com");
+        assert_eq!(normalize_email("user@outlook.com").unwrap(), "user@outlook.com");
         for email in [
             "",
             "@qq.com",
-            "a@gmail.com",
-            "a@qq.com.evil",
+            "a@",
+            "plainaddress",
+            "a@domain",
+            "a b@qq.com",
             "a\r\nLOGIN@qq.com",
         ] {
-            assert!(normalize_email(email).is_err());
+            assert!(normalize_email(email).is_err(), "should reject {email:?}");
+        }
+    }
+
+    #[test]
+    fn validates_imap_hosts_and_rejects_injection() {
+        assert_eq!(normalize_host(" IMAP.Gmail.com ").unwrap(), "imap.gmail.com");
+        for host in ["", "localhost", "imap", "imap .gmail.com", "imap\r\n.gmail.com", "..gmail.com"] {
+            assert!(normalize_host(host).is_err(), "should reject {host:?}");
         }
     }
 
