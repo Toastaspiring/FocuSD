@@ -117,13 +117,17 @@ struct NotificationBuffer {
 impl NotificationBuffer {
     fn sync(&mut self, mut current: Vec<QQNotification>) -> Option<String> {
         current.sort_by_key(|item| item.created_at);
+        // The first poll shows whatever is already in the notification hub, but
+        // must not pop a "new message" preview for those pre-existing items.
+        let first_sync = self.baseline.is_none();
+        let previous = self.baseline.take().unwrap_or_default();
         let mut newest = None;
-        if let Some(previous) = &self.baseline {
-            for item in &current {
-                if previous.get(&item.id) != Some(item) {
-                    self.items.retain(|existing| existing.id != item.id);
-                    self.items.insert(0, item.clone());
-                    self.items.truncate(MAX_ITEMS);
+        for item in &current {
+            if previous.get(&item.id) != Some(item) {
+                self.items.retain(|existing| existing.id != item.id);
+                self.items.insert(0, item.clone());
+                self.items.truncate(MAX_ITEMS);
+                if !first_sync {
                     newest = Some(item.id.clone());
                 }
             }
@@ -1119,14 +1123,15 @@ mod tests {
         }
     }
     #[test]
-    fn startup_notifications_do_not_replay_and_new_messages_are_deduplicated() {
+    fn startup_shows_existing_without_popping_and_new_messages_are_deduplicated() {
         let mut buffer = NotificationBuffer::default();
+        // Items already in the hub are shown in the panel but never pop a preview.
         assert_eq!(buffer.sync(vec![notice(1, "existing")]), None);
-        assert!(buffer.items.is_empty());
+        assert_eq!(buffer.items, vec![notice(1, "existing")]);
         let current = vec![notice(1, "existing"), notice(2, "new")];
         assert_eq!(buffer.sync(current.clone()), Some("2".into()));
         assert_eq!(buffer.sync(current), None);
-        assert_eq!(buffer.items, vec![notice(2, "new")]);
+        assert_eq!(buffer.items, vec![notice(2, "new"), notice(1, "existing")]);
     }
     #[test]
     fn updated_notifications_replace_content_without_increasing_count() {
