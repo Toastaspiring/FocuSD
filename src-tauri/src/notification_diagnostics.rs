@@ -1,4 +1,4 @@
-use crate::{qq_notifications, wechat_reminders};
+use crate::qq_notifications;
 use serde_json::{json, Value};
 use std::{
     fs, thread,
@@ -46,13 +46,10 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         let mut history: Vec<Value> = Vec::new();
         let mut previous = Value::Null;
         let mut qq_arrival = false;
-        let mut wechat_attention = false;
         loop {
             let qq = qq_notifications::diagnostic_state().unwrap_or_else(|error| json!({"error": error}));
-            let wechat = wechat_reminders::diagnostic_state().unwrap_or_else(|error| json!({"error": error}));
             qq_arrival |= qq["itemCount"].as_u64().unwrap_or(0) > 0;
-            wechat_attention |= wechat["lastAttentionAt"].as_u64().is_some();
-            let current = json!({"qq": qq, "wechat": wechat});
+            let current = json!({"qq": qq});
             if current != previous {
                 history.push(json!({"elapsedMs": start.elapsed().as_millis(), "state": current}));
                 previous = current.clone();
@@ -72,7 +69,6 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                 "completed": completed,
                 "windowVisible": app.get_webview_window("main").is_some_and(|window| window.is_visible().unwrap_or(false)),
                 "qqArrivalObserved": qq_arrival,
-                "wechatAttentionObserved": wechat_attention,
                 "current": current,
                 "history": history,
             });

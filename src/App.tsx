@@ -54,11 +54,6 @@ import {
   useQQNotifications,
   type QQNotificationsController,
 } from "./QQNotifications";
-import {
-  WeChatReminderControls,
-  useWeChatReminders,
-  type WeChatRemindersController,
-} from "./WeChatReminders";
 import { MailAccountSettings, useQQMail, type QQMailController } from "./QQMail";
 import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
 import { MessageSourceIcon } from "./MessageSourceIcon";
@@ -249,7 +244,6 @@ type IslandPreset = {
 type IslandShellProps = {
   qqMail: QQMailController;
   qqNotifications: QQNotificationsController;
-  wechatReminders: WeChatRemindersController;
   onOpenMessages: (source: MessageView) => void;
   mode: IslandMode;
   page: IslandPage;
@@ -1096,7 +1090,6 @@ function createTodoId() {
 export function IslandShell({
   qqMail,
   qqNotifications,
-  wechatReminders,
   onOpenMessages,
   mode,
   page,
@@ -1135,16 +1128,13 @@ export function IslandShell({
   const [isPreparing, setIsPreparing] = useState(isTauri);
   const qqPreview = qqNotifications.preview;
   const qqNotificationCount = qqNotifications.snapshot.items.length;
-  const wechatPending = wechatReminders.snapshot.pending;
-  const wechatPreviewAt = wechatReminders.previewReceivedAt;
   const [latestPreviewAt, setLatestPreviewAt] = useState(0);
   const preview = latestMessagePreview([
     qqPreview ? { ...qqPreview, source: "qq", receivedAt: qqNotifications.previewReceivedAt ?? 0 } : null,
-    wechatPreviewAt !== null ? { source: "wechat", title: t.messages.wechat, body: t.messages.newReminder, receivedAt: wechatPreviewAt } : null,
     qqMail.preview ? { source: "qqMail", title: qqMail.preview.sender, body: qqMail.preview.subject, receivedAt: qqMail.previewReceivedAt ?? 0 } : null,
   ], latestPreviewAt);
   if (preview && preview.receivedAt > latestPreviewAt) setLatestPreviewAt(preview.receivedAt);
-  const messageBadgeLabel = t.messages.badge(qqNotificationCount, wechatPending);
+  const messageBadgeLabel = t.messages.badge(qqNotificationCount, false);
   const isLiquidGlass = appearanceMode === "liquidGlass";
   const isMusicPlaying = mediaState.playbackStatus === "playing";
   const className = [
@@ -1366,13 +1356,7 @@ export function IslandShell({
                     void qqMail.readMail(qqMail.preview);
                     return;
                   }
-                  if (preview.source === "qq") {
-                    onOpenMessages(qqPreview ? `notif:${qqPreview.appId}` : "qq");
-                    return;
-                  }
-                  void wechatReminders.openWeChat().then((opened) => {
-                    if (opened === false) onOpenMessages(preview.source);
-                  });
+                  onOpenMessages(qqPreview ? `notif:${qqPreview.appId}` : "qq");
                 } else {
                   onOpenPage(page);
                 }
@@ -1514,9 +1498,9 @@ export function IslandShell({
             />
 
             <div className="window-actions">
-              <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={t.messages.label(messageBadgeLabel)} aria-pressed={page === "qq"} title={t.messages.title} onClick={() => onOpenMessages(wechatPending ? "wechat" : "qq")}>
+              <button className={`icon-button island-message-button${page === "qq" ? " island-message-button--active" : ""}`} type="button" aria-label={t.messages.label(messageBadgeLabel)} aria-pressed={page === "qq"} title={t.messages.title} onClick={() => onOpenMessages("qq")}>
                 <Bell size={17} strokeWidth={1.8} />
-                {(qqNotificationCount > 0 || wechatPending) && <span className="island-message-button__dot" aria-hidden="true" />}
+                {qqNotificationCount > 0 && <span className="island-message-button__dot" aria-hidden="true" />}
               </button>
               <button
                 className="icon-button island-translate-button"
@@ -1838,7 +1822,6 @@ function LayoutEditor({
   locale,
   settings,
   qqNotifications,
-  wechatReminders,
   qqMail,
   clipboardSettings,
   saveDirectoryDraft,
@@ -1870,7 +1853,6 @@ function LayoutEditor({
   locale: LocaleCode;
   settings: IslandSettings;
   qqNotifications: QQNotificationsController;
-  wechatReminders: WeChatRemindersController;
   qqMail: QQMailController;
   clipboardSettings: ClipboardHistorySettings;
   saveDirectoryDraft: string;
@@ -2154,7 +2136,6 @@ function LayoutEditor({
       <section className="settings-section settings-section--messages">
         <div className="settings-section__header"><span>{t.settings.messageReception}</span></div>
         <QQNotificationControls controller={qqNotifications} />
-        <WeChatReminderControls controller={wechatReminders} />
         <MailAccountSettings controller={qqMail} />
       </section>
 
@@ -4282,7 +4263,6 @@ function IslandApp({
   const [mode, setMode] = useState<IslandMode>("collapsed");
   const [isTucked, setIsTucked] = useState(false);
   const qqNotifications = useQQNotifications(mode === "collapsed" && !isTucked);
-  const wechatReminders = useWeChatReminders(mode === "collapsed" && !isTucked);
   const qqMail = useQQMail(mode === "collapsed" && !isTucked);
   const [messageSource, setMessageSource] = useState<MessageView>("qq");
   const [isPositionDetached, setIsPositionDetached] = useState(() => loadIslandPosition() !== null);
@@ -5980,7 +5960,6 @@ function IslandApp({
       <IslandShell
         qqMail={qqMail}
         qqNotifications={qqNotifications}
-        wechatReminders={wechatReminders}
         onOpenMessages={openMessages}
         mode={mode}
         page={page}
@@ -6008,7 +5987,7 @@ function IslandApp({
       >
         {page === "qq" && (
           <div className="message-panel">
-            <MessagesPanel qqMail={qqMail} qqNotifications={qqNotifications} wechatReminders={wechatReminders} source={messageSource} onSourceChange={openMessages} />
+            <MessagesPanel qqMail={qqMail} qqNotifications={qqNotifications} source={messageSource} onSourceChange={openMessages} />
           </div>
         )}
         {page === "layout" && (
@@ -6016,7 +5995,6 @@ function IslandApp({
             locale={locale}
             settings={settings}
             qqNotifications={qqNotifications}
-            wechatReminders={wechatReminders}
             qqMail={qqMail}
             clipboardSettings={clipboardHistory.settings}
             saveDirectoryDraft={saveDirectoryDraft}

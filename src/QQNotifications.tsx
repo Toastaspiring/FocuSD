@@ -186,13 +186,8 @@ export function useQQNotifications(canPreview: boolean) {
     setPreviewWindow(null);
   }), [acceptSnapshot, run]);
 
-  const openQQ = useCallback(() => run(async () => {
-    await invoke("open_qq");
-    setPreviewWindow(null);
-  }), [run]);
-
   return {
-    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openQQ,
+    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear,
     previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null

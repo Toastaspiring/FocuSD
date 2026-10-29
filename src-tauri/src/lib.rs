@@ -1,11 +1,8 @@
 mod clipboard_history;
 mod media_control;
-mod messenger_activation;
 mod notification_diagnostics;
 mod qq_notifications;
 mod qq_mail;
-mod wechat_reminder_source;
-mod wechat_reminders;
 mod translation;
 
 use serde::{Deserialize, Serialize};
@@ -1776,10 +1773,7 @@ pub fn run() {
                 eprintln!("failed to initialize QQ mail: {error}");
             }
             if let Err(error) = qq_notifications::init(app.handle()) {
-                eprintln!("failed to initialize QQ notifications: {error}");
-            }
-            if let Err(error) = wechat_reminders::init(app.handle()) {
-                eprintln!("failed to initialize WeChat reminders: {error}");
+                eprintln!("failed to initialize notifications: {error}");
             }
             if let Err(error) = notification_diagnostics::start(app.handle()) {
                 eprintln!("failed to initialize notification diagnostics: {error}");
@@ -1800,15 +1794,11 @@ pub fn run() {
             qq_mail::mark_all_qq_mail_read,
             qq_mail::read_qq_mail,
             qq_mail::disconnect_qq_mail,
-            wechat_reminders::get_wechat_reminder_state,
-            wechat_reminders::set_wechat_reminders_enabled,
-            wechat_reminders::open_wechat,
             qq_notifications::get_qq_notification_state,
             qq_notifications::set_qq_notifications_enabled,
             qq_notifications::request_qq_notification_access,
             qq_notifications::open_qq_notification_settings,
             qq_notifications::clear_qq_notifications,
-            qq_notifications::open_qq,
             set_island_layout,
             set_island_interaction,
             start_island_drag,
