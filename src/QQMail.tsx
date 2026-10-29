@@ -24,11 +24,13 @@ export type MailContent = { id: string; content: string; contentType: "text/plai
 
 export function sanitizeMailHtml(content: string) {
   return DOMPurify.sanitize(content, {
-    ALLOWED_TAGS: ["p", "br", "div", "span", "h1", "h2", "h3", "h4", "strong", "b", "em", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "a", "hr"],
-    ALLOWED_ATTR: ["href", "title", "colspan", "rowspan"],
-    ALLOWED_URI_REGEXP: /^https?:\/\//i,
+    USE_PROFILES: { html: true },
+    ADD_TAGS: ["style", "center", "font"],
+    ADD_ATTR: ["target", "bgcolor", "background", "align", "valign", "face", "size", "color"],
+    FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "input", "button", "textarea", "meta", "link", "base"],
+    FORBID_ATTR: ["srcset"],
+    ALLOWED_URI_REGEXP: /^(?:https?:|data:image\/|mailto:|cid:)/i,
     ALLOW_DATA_ATTR: false,
-    ALLOW_ARIA_ATTR: false,
   });
 }
 
@@ -261,6 +263,32 @@ function formatMailTime(time: number, locale: string) {
   return new Date(time).toLocaleString(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function MailHtmlFrame({ html, onOpenLink }: { html: string; onOpenLink: (href: string) => void }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(260);
+  const doc = useMemo(
+    () => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}body{background:#ffffff;color:#1a1a1a;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:14px;word-break:break-word;overflow-wrap:anywhere}img{max-width:100%;height:auto;border:0}a{color:#0b66c3}table{max-width:100%}*{box-sizing:border-box}</style></head><body>${html}</body></html>`,
+    [html],
+  );
+
+  const handleLoad = useCallback(() => {
+    const frameDoc = ref.current?.contentDocument;
+    if (!frameDoc) return;
+    if (frameDoc.body) setHeight(Math.min(Math.max(frameDoc.body.scrollHeight + 8, 120), 6000));
+    frameDoc.addEventListener("click", (event) => {
+      const anchor = (event.target as Element | null)?.closest?.("a");
+      if (!anchor) return;
+      event.preventDefault();
+      const href = anchor.getAttribute("href");
+      if (href && /^https?:/i.test(href)) onOpenLink(href);
+    });
+  }, [onOpenLink]);
+
+  return (
+    <iframe ref={ref} className="qq-mail-frame" title="email" sandbox="allow-same-origin" srcDoc={doc} onLoad={handleLoad} style={{ height: `${height}px` }} />
+  );
+}
+
 function MailProviderSelect({ value, disabled, onChange }: { value: MailProvider; disabled?: boolean; onChange: (provider: MailProvider) => void }) {
   const t = useTranslation();
   const [open, setOpen] = useState(false);
@@ -401,12 +429,7 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
         <div className="qq-mail-reader__meta"><span>{selectedMail.sender}</span>{selectedMail.receivedAt !== null && <time dateTime={new Date(selectedMail.receivedAt).toISOString()}>{formatMailTime(selectedMail.receivedAt, t.localeTag)}</time>}</div>
         {reading ? <div className="qq-mail-reader__state" role="status"><LoaderCircle size={19} className="qq-mail-spinning" />{t.mail.loading}</div>
           : readError ? <div className="qq-mail-reader__state"><p className="qq-panel__error" role="alert">{readError}</p><button className="message-action" type="button" onClick={() => void readMail(selectedMail)}><RefreshCw size={14} />{t.common.retry}</button></div>
-          : content?.contentType === "text/html" ? <div className="qq-mail-body" onClick={(event) => {
-              const link = event.target instanceof Element ? event.target.closest("a") : null;
-              if (!link) return;
-              event.preventDefault();
-              if (link.getAttribute("href")) void openLink(link.getAttribute("href")!);
-            }} dangerouslySetInnerHTML={{ __html: html || DOMPurify.sanitize(`<p>${t.mail.emptyHtml}</p>`) }} />
+          : content?.contentType === "text/html" ? (html ? <MailHtmlFrame html={html} onOpenLink={(href) => void openLink(href)} /> : <div className="qq-mail-body qq-mail-body--text">{t.mail.emptyHtml}</div>)
           : <div className="qq-mail-body qq-mail-body--text">{content?.content || t.mail.emptyText}</div>}
       </div>
       <p className="qq-mail-reader__notice">{t.mail.notice}</p>

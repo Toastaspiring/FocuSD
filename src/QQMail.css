@@ -51,6 +51,7 @@
 .qq-mail-reader__state { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 0; color: rgba(241, 246, 250, .65); font-size: 13px; }
 .qq-mail-reader__state .qq-panel__error { flex-basis: 100%; margin: 0; }
 .qq-mail-reader__notice { flex: 0 0 auto; margin: 10px 8px 0; color: rgba(241, 246, 250, .55); font-size: 11px; line-height: 1.5; }
+.qq-mail-frame { width: 100%; min-height: 120px; border: 0; border-radius: 10px; background: #ffffff; display: block; color-scheme: light; }
 .qq-mail-body { color: rgba(241, 246, 250, .85); font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; user-select: text; }
 .qq-mail-body--text { white-space: pre-wrap; }
 .qq-mail-body > :first-child { margin-top: 0; }
