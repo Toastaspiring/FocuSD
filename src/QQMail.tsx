@@ -483,12 +483,12 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
       {snapshot.configured && <div className="qq-mail-account" title={`${snapshot.email} · ${t.mail.status[snapshot.status]}`}><span className="message-status" data-state={snapshot.status} role="status" aria-label={t.mail.status[snapshot.status]} /><span className="qq-mail-account__email">{snapshot.email}</span></div>}
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       {showForm ? (
-        <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qqMail" size={28} /></span><span>{t.mail.configureInSettings}</span></div>
+        <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qqMail" email={snapshot.email} size={28} /></span><span>{t.mail.configureInSettings}</span></div>
       ) : (
         <>
           <div className="qq-panel__list qq-mail-list" ref={listRef} onScroll={(event) => { listScroll.current = event.currentTarget.scrollTop; }} role="list" aria-label={t.mail.inbox} aria-busy={snapshot.syncing}>
             {snapshot.items.length === 0 ? (
-              <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={26} strokeWidth={1.5} className="qq-mail-spinning" /> : <MessageSourceIcon source="qqMail" size={28} />}</span><span>{snapshot.syncing ? t.mail.syncing : t.mail.empty}</span></div>
+              <div className="qq-panel__empty" role="status"><span className="message-empty-icon">{snapshot.syncing ? <LoaderCircle size={26} strokeWidth={1.5} className="qq-mail-spinning" /> : <MessageSourceIcon source="qqMail" email={snapshot.email} size={28} />}</span><span>{snapshot.syncing ? t.mail.syncing : t.mail.empty}</span></div>
             ) : snapshot.items.map((item) => (
               <article className={`qq-panel__item qq-mail-item${item.unread ? " qq-mail-item--unread" : ""}`} key={item.id} role="listitem">
                 <button type="button" data-mail-id={item.id} onClick={() => { if (onRead) onRead(item); else void readMail(item); }} aria-label={t.mail.readMessage(item.subject, item.unread)}>

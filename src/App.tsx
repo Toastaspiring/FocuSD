@@ -1408,7 +1408,7 @@ export function IslandShell({
           </button>
           {qqMail.preview !== null && (
             <button className="island-message-button island-message-button--compact qq-mail-badge" type="button" aria-label={t.messages.newMailLabel} title={t.messages.openNewMail} onClick={() => onOpenMessages("qqMail")}>
-              <MessageSourceIcon source="qqMail" size={16} />
+              <MessageSourceIcon source="qqMail" email={qqMail.snapshot.email} size={16} />
               <span className="island-message-button__dot" aria-hidden="true" />
             </button>
           )}

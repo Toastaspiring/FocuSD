@@ -28,7 +28,7 @@ export function MessagesPanel({ qqMail, qqNotifications, wechatReminders, source
     <div className="message-sources" role="group" aria-label={t.messages.sources}>
       <button type="button" aria-label={t.messages.qqNotifications} aria-pressed={source === "qq"} onClick={() => navigate("qq")}><MessageSourceIcon source="qq" /><span>{t.messages.notifications}</span>{qq.items.length > 0 && <span className="message-source-count">{mailBadgeCount(qq.items.length)}</span>}</button>
       <button type="button" aria-label={t.messages.wechatReminders} aria-pressed={source === "wechat"} onClick={() => navigate("wechat")}><MessageSourceIcon source="wechat" /><span>{t.messages.wechat}</span>{wechatReminders.snapshot.pending && <span className="message-source-dot" aria-label={t.messages.newReminder} />}</button>
-      <button type="button" aria-label={t.messages.qqMail} aria-pressed={source === "qqMail"} onClick={() => navigate("qqMail")}><MessageSourceIcon source="qqMail" /><span>{t.messages.mail}</span>{mail.enabled && (mail.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(mail.unreadCount ?? 0)}</span>}</button>
+      <button type="button" aria-label={t.messages.qqMail} aria-pressed={source === "qqMail"} onClick={() => navigate("qqMail")}><MessageSourceIcon source="qqMail" email={mail.email} /><span>{t.messages.mail}</span>{mail.enabled && (mail.unreadCount ?? 0) > 0 && <span className="message-source-count">{mailBadgeCount(mail.unreadCount ?? 0)}</span>}</button>
     </div>
   );
 
