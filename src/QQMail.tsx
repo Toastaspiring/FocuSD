@@ -100,6 +100,7 @@ export function useQQMail(canPreview: boolean) {
   const [content, setContent] = useState<MailContent | null>(null);
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
+  const [readerHeight, setReaderHeight] = useState<number | null>(null);
   const readerRequestRef = useRef(0);
   const [previewWindow, setPreviewWindow] = useState<{ id: string; receivedAt: number; expiresAt: number } | null>(null);
   const canPreviewRef = useRef(canPreview);
@@ -253,6 +254,7 @@ export function useQQMail(canPreview: boolean) {
   return {
     snapshot, busy, actionError, connect, setEnabled, refresh, disconnect, openMail, openHelp,
     selectedMail, content, reading, readError, readMail, closeReader, openLink,
+    readerHeight, setReaderHeight,
     preview, previewReceivedAt: preview ? previewWindow?.receivedAt ?? null : null,
   };
 }
@@ -263,18 +265,33 @@ function formatMailTime(time: number, locale: string) {
   return new Date(time).toLocaleString(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function MailHtmlFrame({ html, onOpenLink }: { html: string; onOpenLink: (href: string) => void }) {
+function MailHtmlFrame({ html, onOpenLink, onHeight }: { html: string; onOpenLink: (href: string) => void; onHeight?: (height: number) => void }) {
   const ref = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(260);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const [height, setHeight] = useState(200);
   const doc = useMemo(
-    () => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}body{background:#ffffff;color:#1a1a1a;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:14px;word-break:break-word;overflow-wrap:anywhere}img{max-width:100%;height:auto;border:0}a{color:#0b66c3}table{max-width:100%}*{box-sizing:border-box}</style></head><body>${html}</body></html>`,
+    () => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}html{overflow:hidden}body{background:#ffffff;color:#1a1a1a;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:14px;word-break:break-word;overflow-wrap:anywhere}img{max-width:100%;height:auto;border:0}a{color:#0b66c3}table{max-width:100%}*{box-sizing:border-box}</style></head><body>${html}</body></html>`,
     [html],
   );
 
+  // Keep the iframe exactly as tall as its content so it never shows its own
+  // scrollbar; the outer reader scrolls only once the island hits its cap.
+  const measure = useCallback(() => {
+    const body = ref.current?.contentDocument?.body;
+    if (!body) return;
+    const next = Math.min(Math.max(body.scrollHeight, 60), 20000);
+    setHeight(next);
+    onHeight?.(next);
+  }, [onHeight]);
+
   const handleLoad = useCallback(() => {
     const frameDoc = ref.current?.contentDocument;
-    if (!frameDoc) return;
-    if (frameDoc.body) setHeight(Math.min(Math.max(frameDoc.body.scrollHeight + 8, 120), 6000));
+    if (!frameDoc?.body) return;
+    measure();
+    observerRef.current?.disconnect();
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(frameDoc.body);
+    observerRef.current = observer;
     frameDoc.addEventListener("click", (event) => {
       const anchor = (event.target as Element | null)?.closest?.("a");
       if (!anchor) return;
@@ -282,10 +299,12 @@ function MailHtmlFrame({ html, onOpenLink }: { html: string; onOpenLink: (href: 
       const href = anchor.getAttribute("href");
       if (href && /^https?:/i.test(href)) onOpenLink(href);
     });
-  }, [onOpenLink]);
+  }, [measure, onOpenLink]);
+
+  useEffect(() => () => observerRef.current?.disconnect(), []);
 
   return (
-    <iframe ref={ref} className="qq-mail-frame" title="email" sandbox="allow-same-origin" srcDoc={doc} onLoad={handleLoad} style={{ height: `${height}px` }} />
+    <iframe ref={ref} className="qq-mail-frame" title="email" scrolling="no" sandbox="allow-same-origin" srcDoc={doc} onLoad={handleLoad} style={{ height: `${height}px` }} />
   );
 }
 
@@ -402,9 +421,17 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
   const listRef = useRef<HTMLDivElement>(null);
   const listScroll = useRef(0);
   const returnFocus = useRef<string | null>(null);
-  const { selectedMail, content, reading, readError, readMail, closeReader, openLink } = controller;
+  const { selectedMail, content, reading, readError, readMail, closeReader, openLink, setReaderHeight } = controller;
   const html = useMemo(() => content?.contentType === "text/html" ? sanitizeMailHtml(content.content) : "", [content]);
   const readerRef = useRef<HTMLDivElement>(null);
+
+  const reportReaderHeight = useCallback(() => {
+    const scroll = readerRef.current?.scrollHeight;
+    if (!scroll) return;
+    // scroll = subject + meta + body (incl. reader padding); add the island
+    // chrome around it (window padding, header, panel header, notice).
+    setReaderHeight(Math.min(Math.max(scroll + 150, 360), 660));
+  }, [setReaderHeight]);
 
   useLayoutEffect(() => {
     if (!selectedMail && listRef.current) {
@@ -416,6 +443,11 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
     }
     if (selectedMail && readerRef.current) { returnFocus.current = selectedMail.id; readerRef.current.scrollTop = 0; readerRef.current.focus(); }
   }, [selectedMail]);
+
+  useLayoutEffect(() => {
+    if (!selectedMail) { setReaderHeight(null); return; }
+    reportReaderHeight();
+  }, [selectedMail, content, reading, readError, reportReaderHeight, setReaderHeight]);
 
   if (selectedMail) return (
     <section className="qq-panel qq-mail-panel" aria-label={t.mail.reader}>
@@ -429,7 +461,7 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
         <div className="qq-mail-reader__meta"><span>{selectedMail.sender}</span>{selectedMail.receivedAt !== null && <time dateTime={new Date(selectedMail.receivedAt).toISOString()}>{formatMailTime(selectedMail.receivedAt, t.localeTag)}</time>}</div>
         {reading ? <div className="qq-mail-reader__state" role="status"><LoaderCircle size={19} className="qq-mail-spinning" />{t.mail.loading}</div>
           : readError ? <div className="qq-mail-reader__state"><p className="qq-panel__error" role="alert">{readError}</p><button className="message-action" type="button" onClick={() => void readMail(selectedMail)}><RefreshCw size={14} />{t.common.retry}</button></div>
-          : content?.contentType === "text/html" ? (html ? <MailHtmlFrame html={html} onOpenLink={(href) => void openLink(href)} /> : <div className="qq-mail-body qq-mail-body--text">{t.mail.emptyHtml}</div>)
+          : content?.contentType === "text/html" ? (html ? <MailHtmlFrame html={html} onOpenLink={(href) => void openLink(href)} onHeight={() => requestAnimationFrame(reportReaderHeight)} /> : <div className="qq-mail-body qq-mail-body--text">{t.mail.emptyHtml}</div>)
           : <div className="qq-mail-body qq-mail-body--text">{content?.content || t.mail.emptyText}</div>}
       </div>
       <p className="qq-mail-reader__notice">{t.mail.notice}</p>

@@ -4413,6 +4413,8 @@ function IslandApp({
     ),
     TODO_SCROLL_START_ROWS,
   );
+  const isReadingMail =
+    page === "qq" && messageSource === "qqMail" && Boolean(qqMail.selectedMail);
   const expandedIslandHeight =
     page === "todo"
       ? isTodoArchivePage
@@ -4426,10 +4428,10 @@ function IslandApp({
         : page === "clipboard"
           ? CLIPBOARD_EXPANDED_ISLAND_HEIGHT
           : page === "qq"
-            ? messagePanelHeight(messageSource, Boolean(qqMail.selectedMail))
+            ? isReadingMail
+              ? qqMail.readerHeight ?? 600
+              : messagePanelHeight(messageSource, false)
             : EDITOR_EXPANDED_ISLAND_HEIGHT;
-  const isReadingMail =
-    page === "qq" && messageSource === "qqMail" && Boolean(qqMail.selectedMail);
   const expandedIslandWidth = isReadingMail
     ? MAIL_READING_ISLAND_WIDTH
     : EXPANDED_ISLAND_WIDTH;
