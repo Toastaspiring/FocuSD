@@ -36,6 +36,7 @@ const DIAGNOSTIC_TITLE: &str = "FocuSD QQ 通知诊断";
 const DIAGNOSTIC_BODY: &str = "这是本机通道测试，不是聊天消息。";
 static SERVICE: OnceLock<Arc<NotificationService>> = OnceLock::new();
 static ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+static IMAGE_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +45,7 @@ pub struct QQNotification {
     app_id: String,
     app: String,
     icon: Option<String>,
+    image: Option<String>,
     title: String,
     body: String,
     created_at: i64,
@@ -564,7 +566,67 @@ fn read_notifications() -> Result<(NotificationStatus, Vec<QQNotification>), Str
             items.push(item);
         }
     }
+    attach_images(&mut items);
     Ok((NotificationStatus::Listening, items))
+}
+
+/// Fills in each notification's own image (e.g. a Chrome toast's logo override),
+/// read from the notification store and cached per notification so the store is
+/// only touched when a new notification appears.
+fn attach_images(items: &mut [QQNotification]) {
+    let cache = IMAGE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let missing: Vec<i64> = {
+        let Ok(guard) = cache.lock() else {
+            return;
+        };
+        items
+            .iter()
+            .filter(|item| !guard.contains_key(&item.id))
+            .filter_map(|item| db_id_from(&item.id))
+            .collect()
+    };
+    if !missing.is_empty() {
+        let paths = crate::notification_launch::image_paths_for_db_ids(&missing);
+        if let Ok(mut guard) = cache.lock() {
+            for item in items.iter() {
+                if guard.contains_key(&item.id) {
+                    continue;
+                }
+                let image = db_id_from(&item.id)
+                    .and_then(|db_id| paths.get(&db_id))
+                    .and_then(|path| read_image_data_url(path));
+                guard.insert(item.id.clone(), image);
+            }
+            if guard.len() > 128 {
+                guard.clear();
+            }
+        }
+    }
+    if let Ok(guard) = cache.lock() {
+        for item in items.iter_mut() {
+            if let Some(image) = guard.get(&item.id) {
+                item.image = image.clone();
+            }
+        }
+    }
+}
+
+/// Reads a local image file (a toast image) into a base64 data URL.
+fn read_image_data_url(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.is_empty() || bytes.len() > 512 * 1024 {
+        return None;
+    }
+    let mime = if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else if bytes.starts_with(&[0x47, 0x49, 0x46]) {
+        "image/gif"
+    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        "image/webp"
+    } else {
+        "image/png"
+    };
+    Some(format!("data:{mime};base64,{}", STANDARD.encode(&bytes)))
 }
 
 fn read_qq_notification(
@@ -616,15 +678,23 @@ fn read_qq_notification(
         .filter(|text| !text.trim().is_empty())
         .cloned()
         .unwrap_or_else(|| app.clone());
-    let body = parts.iter().skip(1).cloned().collect::<Vec<_>>().join("\n");
+    // Only the first body line is kept: for mail this is the subject, for chats
+    // the message — enough to recognise it without the full preview.
+    let body = parts
+        .iter()
+        .skip(1)
+        .find(|text| !text.trim().is_empty())
+        .cloned()
+        .unwrap_or_default();
     let icon = app_icon(&app_info, &aumid);
     Ok(Some(QQNotification {
         id: format!("{aumid}:{id}:{ticks}"),
         app_id: if aumid.is_empty() { app.clone() } else { aumid.clone() },
         icon,
+        image: None,
         app: app.chars().take(80).collect(),
         title: title.chars().take(120).collect(),
-        body: body.chars().take(1000).collect(),
+        body: body.chars().take(500).collect(),
         created_at: ticks / 10_000 - 11_644_473_600_000,
     }))
 }
@@ -724,6 +794,7 @@ mod tests {
                 app_id: "private-app-id".into(),
                 app: "private-app".into(),
                 icon: None,
+                image: None,
                 title: "private-sender".into(),
                 body: "private-message".into(),
                 created_at: 123,
@@ -742,6 +813,7 @@ mod tests {
             app_id: "App".into(),
             app: "App".into(),
             icon: None,
+            image: None,
             title: "QQ".into(),
             body: body.into(),
             created_at: id as i64,

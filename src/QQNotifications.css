@@ -273,7 +273,24 @@
 }
 
 .qq-notification-item {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.qq-notification-item__text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.qq-notification-item__image {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-top: 1px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .qq-notification-item__app {

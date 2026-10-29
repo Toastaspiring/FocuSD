@@ -15,6 +15,7 @@ export type QQNotification = {
   appId: string;
   app: string;
   icon: string | null;
+  image: string | null;
   title: string;
   body: string;
   createdAt: number;
@@ -249,9 +250,12 @@ export function QQNotificationPanel({ controller, navigation, appId }: { control
           <article className="qq-panel__item qq-notification" key={item.id} role="listitem">
             <button type="button" className="qq-notification__open" onClick={() => openNotification(item)} title={t.qq.openNotification(item.title)} aria-label={t.qq.openNotification(item.title)}>
               <div className="qq-notification-item">
-                {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
-                <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
-                {item.body && <p>{item.body}</p>}
+                {item.image && <img className="qq-notification-item__image" src={item.image} alt="" aria-hidden="true" draggable={false} />}
+                <div className="qq-notification-item__text">
+                  {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
+                  <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
+                  {item.body && <p>{item.body}</p>}
+                </div>
               </div>
             </button>
           </article>
