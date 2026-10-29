@@ -2,6 +2,7 @@ mod app_icon_source;
 mod clipboard_history;
 mod media_control;
 mod notification_diagnostics;
+mod notification_launch;
 mod window_activation;
 mod qq_notifications;
 mod qq_mail;
@@ -1800,8 +1801,7 @@ pub fn run() {
             qq_notifications::set_qq_notifications_enabled,
             qq_notifications::request_qq_notification_access,
             qq_notifications::open_qq_notification_settings,
-            qq_notifications::open_notification_app,
-            qq_notifications::open_notification_link,
+            qq_notifications::open_notification,
             qq_notifications::clear_qq_notifications,
             set_island_layout,
             set_island_interaction,

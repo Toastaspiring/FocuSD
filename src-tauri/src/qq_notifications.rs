@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::Path,
     process::Command,
     sync::{mpsc, Arc, Mutex, OnceLock},
     thread,
@@ -271,11 +271,28 @@ pub fn open_qq_notification_settings(app: AppHandle, access: bool) -> Result<(),
         .map_err(|error| format!("无法打开 Windows 通知设置：{error}"))
 }
 
-/// Opens the app that sent a notification: focuses its existing window when one
-/// is open, otherwise launches it via its Start Menu shortcut.
+/// Opens a clicked notification. For a Chromium browser this replays Windows'
+/// own deep-link activation (`--notification-launch-id`) so the exact page or
+/// conversation opens in the right profile; otherwise it focuses the sending
+/// app's window, launching it only when none is open.
 #[tauri::command]
-pub fn open_notification_app(app: AppHandle, app_id: String) -> Result<(), String> {
+pub fn open_notification(app: AppHandle, id: String, app_id: String) -> Result<(), String> {
     if let Some(exe) = crate::app_icon_source::target_exe_for_aumid(&app_id) {
+        if is_chromium(&exe) {
+            if let Some(launch) = db_id_from(&id)
+                .and_then(|db_id| crate::notification_launch::launch_for_db_id(db_id))
+                .map(|(_, launch)| launch)
+                .filter(|launch| is_safe_launch(launch))
+            {
+                if Command::new(&exe)
+                    .arg(format!("--notification-launch-id={launch}"))
+                    .spawn()
+                    .is_ok()
+                {
+                    return Ok(());
+                }
+            }
+        }
         if crate::window_activation::activate_app_window(&exe) {
             return Ok(());
         }
@@ -287,66 +304,30 @@ pub fn open_notification_app(app: AppHandle, app_id: String) -> Result<(), Strin
         .map_err(|error| format!("Could not open the app: {error}"))
 }
 
-/// Opens a link from a notification. For a Chromium browser the URL is opened
-/// in the already-running profile (a new tab in the existing window, no profile
-/// picker); anything else goes through the default handler.
-#[tauri::command]
-pub fn open_notification_link(app: AppHandle, app_id: String, url: String) -> Result<(), String> {
-    if !is_safe_http_url(&url) {
-        return Err("Unsupported link.".into());
-    }
-    if let Some(exe) = crate::app_icon_source::target_exe_for_aumid(&app_id) {
-        if let Some(family) = chromium_family(&exe) {
-            let mut command = Command::new(&exe);
-            if let Some(profile) = chromium_last_used_profile(family) {
-                command.arg(format!("--profile-directory={profile}"));
-            }
-            if command.arg(&url).spawn().is_ok() {
-                return Ok(());
-            }
-        }
-    }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|error| format!("Could not open the link: {error}"))
+/// The middle field of a `{aumid}:{id}:{ticks}` notification id is the store's
+/// `Notification.Id`.
+fn db_id_from(id: &str) -> Option<i64> {
+    let mut parts = id.rsplitn(3, ':');
+    let _ticks = parts.next()?;
+    parts.next()?.parse::<i64>().ok()
 }
 
-fn is_safe_http_url(url: &str) -> bool {
-    (url.starts_with("http://") || url.starts_with("https://"))
-        && url.len() <= 2048
-        && !url.chars().any(char::is_whitespace)
+fn is_chromium(exe: &Path) -> bool {
+    exe.file_name()
+        .map(|name| name.to_ascii_lowercase())
+        .is_some_and(|name| {
+            matches!(
+                name.to_string_lossy().as_ref(),
+                "chrome.exe" | "msedge.exe" | "brave.exe"
+            )
+        })
 }
 
-/// The per-user data folder name for a Chromium browser executable, if known.
-fn chromium_family(exe: &Path) -> Option<&'static str> {
-    let name = exe.file_name()?.to_string_lossy().to_ascii_lowercase();
-    match name.as_str() {
-        "chrome.exe" => Some(r"Google\Chrome\User Data"),
-        "msedge.exe" => Some(r"Microsoft\Edge\User Data"),
-        "brave.exe" => Some(r"BraveSoftware\Brave-Browser\User Data"),
-        _ => None,
-    }
-}
-
-fn chromium_last_used_profile(user_data_suffix: &str) -> Option<String> {
-    let local = std::env::var_os("LOCALAPPDATA")?;
-    let local_state = PathBuf::from(local)
-        .join(user_data_suffix)
-        .join("Local State");
-    let contents = std::fs::read_to_string(local_state).ok()?;
-    let parsed: serde_json::Value = serde_json::from_str(&contents).ok()?;
-    let profile = parsed
-        .get("profile")?
-        .get("last_used")?
-        .as_str()?
-        .to_string();
-    // Only accept a plain profile folder name, never a path or an argument.
-    (!profile.is_empty()
-        && !profile.starts_with('-')
-        && profile
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == ' ' || ch == '_' || ch == '-'))
-    .then_some(profile)
+fn is_safe_launch(launch: &str) -> bool {
+    !launch.is_empty()
+        && launch.len() <= 4096
+        && !launch.starts_with('-')
+        && !launch.chars().any(char::is_control)
 }
 
 fn publish(

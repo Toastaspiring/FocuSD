@@ -10,22 +10,6 @@ import "./QQNotifications.css";
 const ENABLED_KEY = "focusd-island-qq-notifications-enabled";
 const ACCESS_REQUESTED_KEY = "focusd-island-qq-notification-access-requested";
 
-// Windows doesn't expose a toast's deep link, but browser notifications put the
-// site in their text (e.g. Chrome shows "www.instagram.com"). When we can find
-// one, opening it routes through the default browser, which lands on an existing
-// tab rather than a new window.
-function urlFromNotification(text: string): string | null {
-  const inline = text.match(/https?:\/\/[^\s<>"']+/i);
-  if (inline) return inline[0];
-  for (const line of text.split(/\r?\n/)) {
-    const candidate = line.trim();
-    if (/^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?$/i.test(candidate) && /\.[a-z]{2,}(?:\/|$)/i.test(candidate)) {
-      return `https://${candidate}`;
-    }
-  }
-  return null;
-}
-
 export type QQNotification = {
   id: string;
   appId: string;
@@ -204,14 +188,9 @@ export function useQQNotifications(canPreview: boolean) {
 
   const openNotification = useCallback((item: QQNotification) => {
     if (!isTauri()) return;
-    // Prefer the link in the notification (opens a tab in the existing browser
-    // window); otherwise just bring the sending app's window to the front.
-    const url = urlFromNotification(`${item.title}\n${item.body}`);
-    if (url) {
-      void invoke("open_notification_link", { appId: item.appId, url }).catch(() => {});
-      return;
-    }
-    if (item.appId) void invoke("open_notification_app", { appId: item.appId }).catch(() => {});
+    // The backend replays Windows' own deep-link activation for browser
+    // notifications, and focuses the sending app for everything else.
+    void invoke("open_notification", { id: item.id, appId: item.appId }).catch(() => {});
   }, []);
 
   return {
