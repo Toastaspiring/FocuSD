@@ -2,6 +2,7 @@ mod app_icon_source;
 mod clipboard_history;
 mod media_control;
 mod notification_diagnostics;
+mod window_activation;
 mod qq_notifications;
 mod qq_mail;
 mod translation;

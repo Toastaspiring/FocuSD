@@ -46,6 +46,7 @@ const PKEY_APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
 struct Shortcut {
     aumid: String,
     lnk: PathBuf,
+    target: PathBuf,
     icon: PathBuf,
     index: i32,
 }
@@ -77,6 +78,13 @@ pub fn icon_png_for_aumid(aumid: &str) -> Option<Vec<u8>> {
 /// Returns the Start Menu shortcut that launches the given AUMID's app, if any.
 pub fn launch_target_for_aumid(aumid: &str) -> Option<PathBuf> {
     with_shortcut(aumid, |shortcut| shortcut.lnk.clone())
+}
+
+/// Returns the executable the given AUMID's shortcut runs, used to find an
+/// already-open window of that app before launching a fresh one.
+pub fn target_exe_for_aumid(aumid: &str) -> Option<PathBuf> {
+    with_shortcut(aumid, |shortcut| shortcut.target.clone())
+        .filter(|path| !path.as_os_str().is_empty())
 }
 
 fn start_menu_dirs() -> Vec<PathBuf> {
@@ -146,6 +154,21 @@ unsafe fn read_shortcut(path: &Path) -> Option<Shortcut> {
     let _ = PropVariantClear(&mut value);
     let aumid = aumid?;
 
+    // The executable the shortcut launches, used both as an icon fallback and
+    // to find an already-open window of the app.
+    let mut target_buf = [0u16; 260];
+    let target = if link
+        .GetPath(&mut target_buf, &mut WIN32_FIND_DATAW::default(), 0)
+        .is_ok()
+    {
+        let len = target_buf.iter().position(|&c| c == 0).unwrap_or(0);
+        (len > 0)
+            .then(|| PathBuf::from(OsString::from_wide(&target_buf[..len])))
+            .unwrap_or_default()
+    } else {
+        PathBuf::new()
+    };
+
     // Prefer the shortcut's explicit icon; fall back to its target executable.
     let mut icon_buf = [0u16; 260];
     let mut index = 0i32;
@@ -158,20 +181,17 @@ unsafe fn read_shortcut(path: &Path) -> Option<Shortcut> {
     let icon = match icon_path {
         Some(path) => path,
         None => {
-            let mut target = [0u16; 260];
-            link.GetPath(&mut target, &mut WIN32_FIND_DATAW::default(), 0)
-                .ok()?;
-            let len = target.iter().position(|&c| c == 0).unwrap_or(0);
-            if len == 0 {
+            index = 0;
+            if target.as_os_str().is_empty() {
                 return None;
             }
-            index = 0;
-            PathBuf::from(OsString::from_wide(&target[..len]))
+            target.clone()
         }
     };
     Some(Shortcut {
         aumid,
         lnk: path.to_path_buf(),
+        target,
         icon,
         index,
     })
