@@ -289,14 +289,37 @@ unsafe fn color_bitmap_to_png(bitmap: HBITMAP) -> Option<Vec<u8>> {
         }
     }
 
-    let image =
-        image::RgbaImage::from_raw(width as u32, height as u32, pixels)?;
+    let image = image::RgbaImage::from_raw(width as u32, height as u32, pixels)?;
+    encode_trimmed_png(image)
+}
+
+/// Re-encodes a PNG with its transparent border cropped, so logos that ship with
+/// large padding (common for packaged-app assets) fill the icon box.
+pub fn trim_png_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
+    let image = image::load_from_memory(bytes).ok()?.to_rgba8();
+    encode_trimmed_png(image)
+}
+
+fn encode_trimmed_png(image: image::RgbaImage) -> Option<Vec<u8>> {
+    let (width, height) = image.dimensions();
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (width, height, 0u32, 0u32);
+    for (x, y, pixel) in image.enumerate_pixels() {
+        if pixel[3] > 8 {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+    }
+    let trimmed = if max_x >= min_x && max_y >= min_y {
+        image::imageops::crop_imm(&image, min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+            .to_image()
+    } else {
+        image
+    };
     let mut png = Vec::new();
-    image
-        .write_to(
-            &mut std::io::Cursor::new(&mut png),
-            image::ImageFormat::Png,
-        )
+    trimmed
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .ok()?;
     Some(png)
 }

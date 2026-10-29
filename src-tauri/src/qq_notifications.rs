@@ -577,6 +577,11 @@ fn read_app_logo(app_info: &AppInfo) -> Option<String> {
     if buffer.is_empty() {
         return None;
     }
+    // Packaged logos ship with heavy transparent padding; trim it so the glyph
+    // fills the icon box instead of shrinking to a dot.
+    if let Some(trimmed) = crate::app_icon_source::trim_png_bytes(&buffer) {
+        return Some(format!("data:image/png;base64,{}", STANDARD.encode(&trimmed)));
+    }
     let mime = if buffer.starts_with(&[0xFF, 0xD8, 0xFF]) {
         "image/jpeg"
     } else {
