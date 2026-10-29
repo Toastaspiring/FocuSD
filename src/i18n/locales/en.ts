@@ -19,6 +19,7 @@ const en: Translations = {
     wechat: "WeChat",
     mail: "Mail",
     notifications: "Notifs",
+    noSources: "No active message sources yet.",
     qqMail: "QQ Mail",
     qqNotifications: "QQ notifications",
     wechatReminders: "WeChat reminders",

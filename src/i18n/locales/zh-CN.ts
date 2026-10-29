@@ -19,6 +19,7 @@ const zhCN: Translations = {
     wechat: "微信",
     mail: "邮箱",
     notifications: "通知",
+    noSources: "暂无活动的消息来源。",
     qqMail: "QQ 邮箱",
     qqNotifications: "QQ 通知",
     wechatReminders: "微信提醒",

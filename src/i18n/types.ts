@@ -21,6 +21,7 @@ export type Translations = {
     wechat: string;
     mail: string;
     notifications: string;
+    noSources: string;
     qqMail: string;
     qqNotifications: string;
     wechatReminders: string;
