@@ -293,6 +293,8 @@ const ISLAND_POSITION_STORAGE_KEY = "focusd-island-position";
 const MUSIC_SOURCE_PRIORITY_STORAGE_KEY = "focusd-island-music-sources";
 const MIN_COLLAPSED_ISLAND_WIDTH = 280;
 const MAX_COLLAPSED_ISLAND_WIDTH = 340;
+const EXPANDED_ISLAND_WIDTH = 560;
+const MAIL_READING_ISLAND_WIDTH = 720;
 const MIN_COLLAPSED_TEXT_UNITS = 2;
 const MAX_COLLAPSED_TEXT_UNITS = 12;
 const BASE_EXPANDED_ISLAND_HEIGHT = 306;
@@ -4426,6 +4428,11 @@ function IslandApp({
           : page === "qq"
             ? messagePanelHeight(messageSource, Boolean(qqMail.selectedMail))
             : EDITOR_EXPANDED_ISLAND_HEIGHT;
+  const isReadingMail =
+    page === "qq" && messageSource === "qqMail" && Boolean(qqMail.selectedMail);
+  const expandedIslandWidth = isReadingMail
+    ? MAIL_READING_ISLAND_WIDTH
+    : EXPANDED_ISLAND_WIDTH;
   const layoutSync = useRef<{
     frame: number | null;
     inFlight: boolean;
@@ -4447,6 +4454,7 @@ function IslandApp({
         "--island-opacity": settings.opacity / 100,
         "--island-scale": mode === "collapsed" ? settings.collapsedScale : settings.expandedScale,
         "--collapsed-island-width": `${collapsedIslandWidth}px`,
+        "--expanded-island-width": `${expandedIslandWidth}px`,
         "--expanded-island-height": `${expandedIslandHeight}px`,
         "--task-text-color": settings.taskTextColor,
         "--island-pulse-color": settings.pulseColor,
@@ -4481,6 +4489,7 @@ function IslandApp({
     },
     [
       expandedIslandHeight,
+      expandedIslandWidth,
       collapsedIslandWidth,
       mode,
       settings.glassIntensity,
@@ -4555,6 +4564,7 @@ function IslandApp({
       nextMode: IslandMode,
       nextSettings: IslandSettings,
       nextExpandedHeight: number,
+      nextExpandedWidth: number,
       nextCollapsedWidth: number,
       nextIsTucked: boolean,
     ) => {
@@ -4567,6 +4577,7 @@ function IslandApp({
           expandedScale: nextSettings.expandedScale,
           marginY: nextSettings.marginY,
           expandedHeight: nextExpandedHeight,
+          expandedWidth: nextExpandedWidth,
           collapsedWidth: nextCollapsedWidth,
           customPosition: islandPositionRef.current,
           isTucked: nextIsTucked,
@@ -5879,6 +5890,7 @@ function IslandApp({
       mode,
       settings,
       expandedIslandHeight,
+      expandedIslandWidth,
       collapsedIslandWidth,
       isTucked,
     ).finally(() => {
@@ -5886,6 +5898,7 @@ function IslandApp({
     });
   }, [
     expandedIslandHeight,
+    expandedIslandWidth,
     collapsedIslandWidth,
     isTucked,
     mode,

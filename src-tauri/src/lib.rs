@@ -46,9 +46,10 @@ const COLLAPSED_ISLAND_WIDTH: f64 = 340.0;
 const COLLAPSED_ISLAND_HEIGHT: f64 = 38.0;
 const COLLAPSED_RADIUS: f64 = 22.0;
 const EXPANDED_ISLAND_WIDTH: f64 = 560.0;
+const MAX_EXPANDED_ISLAND_WIDTH: f64 = 760.0;
 const DEFAULT_EXPANDED_ISLAND_HEIGHT: f64 = 306.0;
 const MIN_EXPANDED_ISLAND_HEIGHT: f64 = 220.0;
-const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 240.0;
+const EXPANDED_ISLAND_HEIGHT_RANGE: f64 = 360.0;
 const EXPANDED_RADIUS: f64 = 30.0;
 const STAGE_WINDOW_PADDING_Y: f64 = 24.0;
 const TUCKED_VISIBLE_EDGE_HEIGHT: f64 = 10.0;
@@ -89,10 +90,10 @@ impl IslandMode {
         }
     }
 
-    fn base_size(self, collapsed_width: f64, expanded_height: f64) -> (f64, f64) {
+    fn base_size(self, collapsed_width: f64, expanded_width: f64, expanded_height: f64) -> (f64, f64) {
         match self {
             Self::Collapsed => (collapsed_width, COLLAPSED_ISLAND_HEIGHT),
-            Self::Expanded => (EXPANDED_ISLAND_WIDTH, expanded_height),
+            Self::Expanded => (expanded_width, expanded_height),
         }
     }
 
@@ -112,6 +113,7 @@ struct IslandWindowState {
     expanded_scale: f64,
     margin_y: f64,
     collapsed_width: f64,
+    expanded_width: f64,
     expanded_height: f64,
     custom_position: Option<IslandPosition>,
     is_dragging: bool,
@@ -158,6 +160,7 @@ impl Default for IslandWindowState {
             expanded_scale: DEFAULT_EXPANDED_SCALE,
             margin_y: DEFAULT_MARGIN_Y,
             collapsed_width: COLLAPSED_ISLAND_WIDTH,
+            expanded_width: EXPANDED_ISLAND_WIDTH,
             expanded_height: DEFAULT_EXPANDED_ISLAND_HEIGHT,
             custom_position: None,
             is_dragging: false,
@@ -257,6 +260,7 @@ fn set_island_interaction(
     expanded_scale: f64,
     margin_y: Option<f64>,
     expanded_height: Option<f64>,
+    expanded_width: Option<f64>,
     collapsed_width: Option<f64>,
     custom_position: Option<IslandPosition>,
     is_tucked: Option<bool>,
@@ -289,6 +293,10 @@ fn set_island_interaction(
                 MIN_EXPANDED_ISLAND_HEIGHT,
                 DEFAULT_EXPANDED_ISLAND_HEIGHT + EXPANDED_ISLAND_HEIGHT_RANGE,
             );
+        }
+        if let Some(expanded_width) = expanded_width {
+            state.expanded_width =
+                expanded_width.clamp(EXPANDED_ISLAND_WIDTH, MAX_EXPANDED_ISLAND_WIDTH);
         }
         if let Some(collapsed_width) = collapsed_width {
             state.collapsed_width =
@@ -1468,7 +1476,7 @@ fn cursor_is_inside_island(window: &WebviewWindow) -> bool {
 
     let (base_width, base_height) = state
         .mode
-        .base_size(state.collapsed_width, state.expanded_height);
+        .base_size(state.collapsed_width, state.expanded_width, state.expanded_height);
     let island_width = base_width * state.active_scale() * physical_scale;
     let island_height = base_height * state.active_scale() * physical_scale;
     let island_left = (window_width - island_width) / 2.0;
@@ -1571,7 +1579,7 @@ mod tests {
         for scale in [0.75, DEFAULT_COLLAPSED_SCALE, 1.0, 1.4, 2.1] {
             for mode in [IslandMode::Collapsed, IslandMode::Expanded] {
                 let (width, height) =
-                    mode.base_size(COLLAPSED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+                    mode.base_size(COLLAPSED_ISLAND_WIDTH, EXPANDED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
                 let width = width * scale;
                 let height = height * scale;
                 let radius = mode.corner_radius() * scale;
@@ -1601,14 +1609,14 @@ mod tests {
     fn compact_messages_and_mail_reader_keep_the_correct_cursor_boundary() {
         for height in [MIN_EXPANDED_ISLAND_HEIGHT, 244.0, 438.0, 450.0] {
             for scale in [0.75, 1.0, 1.4] {
-                let (width, panel_height) = IslandMode::Expanded.base_size(COLLAPSED_ISLAND_WIDTH, height);
+                let (width, panel_height) = IslandMode::Expanded.base_size(COLLAPSED_ISLAND_WIDTH, EXPANDED_ISLAND_WIDTH, height);
                 let contains = |y| point_in_notch(
                     width * scale / 2.0, y, 0.0, 0.0, width * scale, panel_height * scale,
                     EXPANDED_RADIUS * scale, 0.0,
                 );
                 assert!(contains(panel_height * scale));
                 assert!(!contains(panel_height * scale + 1.0));
-                assert_eq!(IslandMode::Collapsed.base_size(COLLAPSED_ISLAND_WIDTH, height).1, COLLAPSED_ISLAND_HEIGHT);
+                assert_eq!(IslandMode::Collapsed.base_size(COLLAPSED_ISLAND_WIDTH, EXPANDED_ISLAND_WIDTH, height).1, COLLAPSED_ISLAND_HEIGHT);
             }
             let mut positioned = state(IslandMode::Expanded, 1.0, height);
             positioned.custom_position = Some(IslandPosition { x: 420, y: 180 });
@@ -1625,7 +1633,7 @@ mod tests {
             assert_eq!(detached.top_corner_radius(), 0.0);
             detached.custom_position = Some(IslandPosition { x: 420, y: 180 });
             assert!(detached.top_corner_radius() > 0.0);
-            let (width, height) = mode.base_size(COLLAPSED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
+            let (width, height) = mode.base_size(COLLAPSED_ISLAND_WIDTH, EXPANDED_ISLAND_WIDTH, DEFAULT_EXPANDED_ISLAND_HEIGHT);
             let contains = |x, y| point_in_notch(
                 x, y, 80.0, 0.0, width, height, mode.corner_radius(), detached.top_corner_radius(),
             );

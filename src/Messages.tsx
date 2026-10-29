@@ -16,7 +16,7 @@ type MessagesProps = {
 };
 
 export function messagePanelHeight(source: MessageView, readingMail = false) {
-  return source === "qqMail" && readingMail ? 450 : 350;
+  return source === "qqMail" && readingMail ? 600 : 350;
 }
 
 export function MessagesPanel({ qqMail, qqNotifications, wechatReminders, source, onSourceChange }: MessagesProps) {
