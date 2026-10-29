@@ -13,7 +13,10 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 use windows::{
-    core::{w, BOOL, HRESULT, HSTRING, PWSTR},
+    core::{w, Interface, BOOL, HRESULT, HSTRING, PWSTR},
+    ApplicationModel::AppInfo,
+    Foundation::Size,
+    Storage::Streams::{DataReader, IInputStream},
     Win32::{
         Foundation::{CloseHandle, HWND, LPARAM, WPARAM},
         System::{
@@ -50,12 +53,15 @@ const REGISTRATION_REPAIR: &str =
 const DIAGNOSTIC_TITLE: &str = "FocuSD QQ 通知诊断";
 const DIAGNOSTIC_BODY: &str = "这是本机通道测试，不是聊天消息。";
 static SERVICE: OnceLock<Arc<NotificationService>> = OnceLock::new();
+static ICON_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QQNotification {
     id: String,
+    app_id: String,
     app: String,
+    icon: Option<String>,
     title: String,
     body: String,
     created_at: i64,
@@ -562,13 +568,65 @@ fn read_qq_notification(
         .cloned()
         .unwrap_or_else(|| app.clone());
     let body = parts.iter().skip(1).cloned().collect::<Vec<_>>().join("\n");
+    let icon = app_icon(&app_info, &aumid);
     Ok(Some(QQNotification {
         id: format!("{aumid}:{id}:{ticks}"),
+        app_id: if aumid.is_empty() { app.clone() } else { aumid.clone() },
+        icon,
         app: app.chars().take(80).collect(),
         title: title.chars().take(120).collect(),
         body: body.chars().take(1000).collect(),
         created_at: ticks / 10_000 - 11_644_473_600_000,
     }))
+}
+
+/// Returns the source app's logo as a base64 data URL, cached per AppUserModelId
+/// since logos do not change between notifications.
+fn app_icon(app_info: &AppInfo, aumid: &str) -> Option<String> {
+    if aumid.is_empty() {
+        return None;
+    }
+    let cache = ICON_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.get(aumid) {
+            return cached.clone();
+        }
+    }
+    let icon = read_app_logo(app_info);
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(aumid.to_string(), icon.clone());
+    }
+    icon
+}
+
+fn read_app_logo(app_info: &AppInfo) -> Option<String> {
+    let reference = app_info
+        .DisplayInfo()
+        .ok()?
+        .GetLogo(Size {
+            Width: 48.0,
+            Height: 48.0,
+        })
+        .ok()?;
+    let stream = pollster::block_on(reference.OpenReadAsync().ok()?).ok()?;
+    let size = stream.Size().ok()?;
+    if size == 0 || size > 1_000_000 {
+        return None;
+    }
+    let input: IInputStream = stream.cast().ok()?;
+    let reader = DataReader::CreateDataReader(&input).ok()?;
+    let loaded = pollster::block_on(reader.LoadAsync(size as u32).ok()?).ok()?;
+    let mut buffer = vec![0u8; loaded as usize];
+    reader.ReadBytes(&mut buffer).ok()?;
+    if buffer.is_empty() {
+        return None;
+    }
+    let mime = if buffer.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "image/jpeg"
+    } else {
+        "image/png"
+    };
+    Some(format!("data:{mime};base64,{}", STANDARD.encode(&buffer)))
 }
 
 /// Turns a raw AppUserModelId into a short, human-friendly app label when the
@@ -832,7 +890,9 @@ mod tests {
         let snapshot = NotificationSnapshot {
             items: vec![QQNotification {
                 id: "private-id".into(),
+                app_id: "private-app-id".into(),
                 app: "private-app".into(),
+                icon: None,
                 title: "private-sender".into(),
                 body: "private-message".into(),
                 created_at: 123,
@@ -1050,7 +1110,9 @@ mod tests {
     fn notice(id: u32, body: &str) -> QQNotification {
         QQNotification {
             id: id.to_string(),
+            app_id: "App".into(),
             app: "App".into(),
+            icon: None,
             title: "QQ".into(),
             body: body.into(),
             created_at: id as i64,

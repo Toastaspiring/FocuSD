@@ -63,7 +63,7 @@ import { MailAccountSettings, useQQMail, type QQMailController } from "./QQMail"
 import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { CollapsedMessageContent } from "./CollapsedMessageContent";
-import { latestMessagePreview, messagePreviewText, type MessageSource } from "./messagePreview";
+import { latestMessagePreview, messagePreviewText } from "./messagePreview";
 import {
   LOCALE_CODES,
   TRANSLATIONS,
@@ -250,7 +250,7 @@ type IslandShellProps = {
   qqMail: QQMailController;
   qqNotifications: QQNotificationsController;
   wechatReminders: WeChatRemindersController;
-  onOpenMessages: (source: MessageSource) => void;
+  onOpenMessages: (source: MessageView) => void;
   mode: IslandMode;
   page: IslandPage;
   appearanceMode: AppearanceMode;
@@ -1366,8 +1366,11 @@ export function IslandShell({
                     void qqMail.readMail(qqMail.preview);
                     return;
                   }
-                  const open = preview.source === "qq" ? qqNotifications.openQQ : wechatReminders.openWeChat;
-                  void open().then((opened) => {
+                  if (preview.source === "qq") {
+                    onOpenMessages(qqPreview ? `notif:${qqPreview.appId}` : "qq");
+                    return;
+                  }
+                  void wechatReminders.openWeChat().then((opened) => {
                     if (opened === false) onOpenMessages(preview.source);
                   });
                 } else {
@@ -4805,7 +4808,7 @@ function IslandApp({
     setIsTucked(false);
   }, []);
 
-  const openMessages = useCallback((source: MessageSource) => {
+  const openMessages = useCallback((source: MessageView) => {
     qqMail.closeReader();
     setMessageSource(source);
     openIslandPage("qq");

@@ -12,11 +12,37 @@ const ACCESS_REQUESTED_KEY = "focusd-island-qq-notification-access-requested";
 
 export type QQNotification = {
   id: string;
+  appId: string;
   app: string;
+  icon: string | null;
   title: string;
   body: string;
   createdAt: number;
 };
+
+export type NotificationApp = {
+  appId: string;
+  name: string;
+  icon: string | null;
+  count: number;
+};
+
+export function groupNotificationApps(items: QQNotification[]): NotificationApp[] {
+  const order: string[] = [];
+  const byId = new Map<string, NotificationApp>();
+  for (const item of items) {
+    const existing = byId.get(item.appId);
+    if (existing) {
+      existing.count += 1;
+      if (!existing.icon && item.icon) existing.icon = item.icon;
+      if ((!existing.name || existing.name === existing.appId) && item.app) existing.name = item.app;
+    } else {
+      order.push(item.appId);
+      byId.set(item.appId, { appId: item.appId, name: item.app || item.appId, icon: item.icon, count: 1 });
+    }
+  }
+  return order.map((id) => byId.get(id)!);
+}
 
 type QQNotificationSnapshot = {
   revision: number;
@@ -198,10 +224,11 @@ export function QQNotificationControls({ controller, compact = false }: { contro
   </div>;
 }
 
-export function QQNotificationPanel({ controller, navigation }: { controller: QQNotificationsController; navigation: ReactNode }) {
+export function QQNotificationPanel({ controller, navigation, appId }: { controller: QQNotificationsController; navigation: ReactNode; appId?: string }) {
   const { snapshot, busy, actionError, refresh, clear } = controller;
   const t = useTranslation();
   const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? t.qq.status[snapshot.status] : null);
+  const items = appId ? snapshot.items.filter((item) => item.appId === appId) : snapshot.items;
   return (
     <section className="qq-panel" aria-label={t.qq.recent}>
       <header className="qq-panel__header">
@@ -214,12 +241,12 @@ export function QQNotificationPanel({ controller, navigation }: { controller: QQ
       </header>
       {error && <p className="qq-panel__error" role="alert">{error}</p>}
       <div className="qq-panel__list" role="list" aria-label={t.qq.list} aria-busy={busy}>
-        {snapshot.items.length === 0 ? (
+        {items.length === 0 ? (
           <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>{t.common.noMessages}</span></div>
-        ) : snapshot.items.map((item) => (
+        ) : items.map((item) => (
           <article className="qq-panel__item" key={item.id} role="listitem">
             <div className="qq-notification-item">
-              {item.app && <span className="qq-notification-item__app">{item.app}</span>}
+              {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
               <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
               {item.body && <p>{item.body}</p>}
             </div>

@@ -16,7 +16,7 @@ function mailIconFor(email?: string | null) {
   return qqMailIcon;
 }
 
-export function MessageSourceIcon({ source, size = 16, email }: { source: MessageSource; size?: number; email?: string | null }) {
-  const src = source === "qqMail" ? mailIconFor(email) : SOURCE_ICONS[source];
+export function MessageSourceIcon({ source, size = 16, email, icon }: { source: MessageSource; size?: number; email?: string | null; icon?: string | null }) {
+  const src = icon || (source === "qqMail" ? mailIconFor(email) : SOURCE_ICONS[source]);
   return <img className={`message-brand-icon message-brand-icon--${source}`} src={src} alt="" aria-hidden="true" width={size} height={size} draggable={false} />;
 }
