@@ -107,6 +107,7 @@ const zhCN: Translations = {
     openLabel: "打开 QQ 邮箱",
     refresh: "刷新邮件",
     refreshLabel: "刷新 QQ 邮箱",
+    markAllRead: "全部标记为已读",
     disconnect: "断开并删除授权码",
     disconnectLabel: "断开 QQ 邮箱并删除保存的授权码",
     email: "邮箱地址",

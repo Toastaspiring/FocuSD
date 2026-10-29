@@ -230,6 +230,11 @@ enum Work {
         generation: u64,
         reply: Reply,
     },
+    MarkAllRead {
+        generation: u64,
+        email: String,
+        reply: Reply,
+    },
     Read {
         generation: u64,
         email: String,
@@ -343,6 +348,46 @@ impl MailService {
         }
     }
 
+    fn mark_all_read(&self, generation: u64, email: &str) -> Result<MailSnapshot, String> {
+        {
+            let state = self.lock()?;
+            if generation != state.generation || !state.snapshot.enabled {
+                return Err("邮箱连接已取消。".into());
+            }
+        }
+        let result = match read_credential(email) {
+            Ok(Some(credential)) => mark_all_read_remote(email, &credential),
+            Ok(None) => Err(MailFailure::authentication()),
+            Err(_) => Err(MailFailure {
+                authentication: true,
+                message: "无法读取 Windows 邮箱凭据，请重新连接。",
+            }),
+        };
+        let mut state = self.lock()?;
+        if generation != state.generation || !state.snapshot.enabled {
+            return Err("邮箱连接已取消。".into());
+        }
+        match result {
+            Ok(inbox) => {
+                let (snapshot, _) = state
+                    .accept(generation, inbox)
+                    .ok_or_else(|| "邮箱连接已取消。".to_string())?;
+                drop(state);
+                // No preview for a batch mark-read: nothing new arrived.
+                self.publish(snapshot.clone(), None);
+                Ok(snapshot)
+            }
+            Err(failure) => {
+                let snapshot = state.fail(generation, &failure);
+                drop(state);
+                if let Some(snapshot) = snapshot {
+                    self.publish(snapshot, None);
+                }
+                Err(failure.message.into())
+            }
+        }
+    }
+
     fn read(&self, generation: u64, email: &str, message_id: &str) -> Result<MailContent, String> {
         let current = || -> Result<(), String> {
             let state = self.lock()?;
@@ -416,6 +461,13 @@ fn worker(service: Arc<MailService>, receiver: mpsc::Receiver<Work>) {
                     .ok_or_else(|| "请先连接 QQ 邮箱。".to_string())
                     .and_then(|email| service.sync(generation, &email, None));
                 let _ = reply.send(result);
+            }
+            Ok(Work::MarkAllRead {
+                generation,
+                email,
+                reply,
+            }) => {
+                let _ = reply.send(service.mark_all_read(generation, &email));
             }
             Ok(Work::Read {
                 generation,
@@ -555,6 +607,29 @@ pub async fn refresh_qq_mail() -> Result<MailSnapshot, String> {
     service
         .sender
         .send(Work::Refresh { generation, reply })
+        .map_err(|_| "QQ 邮箱服务不可用。".to_string())?;
+    await_reply(receiver).await
+}
+
+#[tauri::command]
+pub async fn mark_all_qq_mail_read() -> Result<MailSnapshot, String> {
+    let service = service()?;
+    let Some((generation, email)) = service.begin_sync() else {
+        let snapshot = service.lock()?.snapshot.clone();
+        return if snapshot.syncing {
+            Ok(snapshot)
+        } else {
+            Err("请先连接并开启 QQ 邮箱接收。".into())
+        };
+    };
+    let (reply, receiver) = mpsc::channel();
+    service
+        .sender
+        .send(Work::MarkAllRead {
+            generation,
+            email,
+            reply,
+        })
         .map_err(|_| "QQ 邮箱服务不可用。".to_string())?;
     await_reply(receiver).await
 }
@@ -772,6 +847,33 @@ fn fetch_remote(email: &str, credential: &MailCredential) -> Result<Inbox, MailF
     let result = fetch_inbox(&mut session);
     let _ = session.logout();
     result
+}
+
+fn mark_all_read_remote(email: &str, credential: &MailCredential) -> Result<Inbox, MailFailure> {
+    let mut session = open_session(email, credential)?;
+    let result = mark_all_read_session(&mut session);
+    let _ = session.logout();
+    result
+}
+
+fn mark_all_read_session<T: Read + Write>(session: &mut Session<T>) -> Result<Inbox, MailFailure> {
+    // Read-write select so the unread mail can be flagged \Seen.
+    session.select("INBOX").map_err(|_| MailFailure::network())?;
+    let unseen = session
+        .uid_search("UNSEEN")
+        .map_err(|_| MailFailure::network())?;
+    if !unseen.is_empty() {
+        let set = unseen
+            .iter()
+            .map(|uid| uid.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        session
+            .uid_store(set, "+FLAGS (\\Seen)")
+            .map_err(|_| MailFailure::network())?;
+    }
+    // Re-read the inbox so the snapshot reflects the now-empty unread list.
+    fetch_inbox(session)
 }
 
 fn open_session(
@@ -1309,6 +1411,30 @@ mod tests {
         for forbidden in [" EXPUNGE", "BODY[]", "RFC822 "] {
             assert!(!commands.contains(forbidden), "{commands}");
         }
+    }
+
+    #[test]
+    fn mark_all_read_flags_every_unseen_uid_then_resyncs_empty() {
+        let script = "* OK ready\r\na1 OK login\r\n\
+* 2 EXISTS\r\n* OK [UIDVALIDITY 7] valid\r\n* OK [UIDNEXT 11] next\r\na2 OK [READ-WRITE] selected\r\n\
+* SEARCH 9 10\r\na3 OK search\r\n\
+a4 OK store\r\n\
+* 0 EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY 7] valid\r\n* OK [UIDNEXT 11] next\r\na5 OK [READ-ONLY] examined\r\n\
+* SEARCH\r\na6 OK search\r\n"
+            .to_string();
+        let (client, output) = client(script);
+        let mut session = client.login("user@qq.com", "test-secret").unwrap();
+        let inbox = mark_all_read_session(&mut session).unwrap();
+        assert_eq!(inbox.unread_count, 0);
+        assert!(inbox.items.is_empty());
+        let commands = String::from_utf8(output.lock().unwrap().clone()).unwrap();
+        assert!(commands.contains("SELECT \"INBOX\""), "{commands}");
+        assert!(commands.contains("UID SEARCH UNSEEN"), "{commands}");
+        assert!(
+            commands.contains("UID STORE 9,10 +FLAGS (\\Seen)"),
+            "{commands}"
+        );
+        assert!(!commands.contains(" EXPUNGE"), "{commands}");
     }
 
     #[test]

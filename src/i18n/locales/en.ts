@@ -107,6 +107,7 @@ const en: Translations = {
     openLabel: "Open QQ Mail",
     refresh: "Refresh mail",
     refreshLabel: "Refresh QQ Mail",
+    markAllRead: "Mark all as read",
     disconnect: "Disconnect and remove authorization code",
     disconnectLabel: "Disconnect QQ Mail and remove the saved authorization code",
     email: "Email address",

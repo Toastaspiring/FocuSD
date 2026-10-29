@@ -109,6 +109,7 @@ export type Translations = {
     openLabel: string;
     refresh: string;
     refreshLabel: string;
+    markAllRead: string;
     disconnect: string;
     disconnectLabel: string;
     email: string;

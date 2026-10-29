@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, ArrowRight, ArrowUpRight, AtSign, Check, ChevronDown, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Server, Unplug } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, AtSign, Check, CheckCheck, ChevronDown, CircleHelp, KeyRound, LoaderCircle, Power, RefreshCw, Server, Unplug } from "lucide-react";
 import DOMPurify from "dompurify";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
@@ -206,6 +206,7 @@ export function useQQMail(canPreview: boolean) {
   const setEnabled = useCallback((enabled: boolean) =>
     run("set_qq_mail_enabled", { email: snapshot.email, enabled }), [run, snapshot.email]);
   const refresh = useCallback(() => run("refresh_qq_mail"), [run]);
+  const markAllRead = useCallback(() => { closeReader(); return run("mark_all_qq_mail_read"); }, [closeReader, run]);
   const disconnect = useCallback(() => { closeReader(); return run("disconnect_qq_mail"); }, [closeReader, run]);
   const readMail = useCallback(async (message: MailMessage) => {
     const requestId = ++readerRequestRef.current;
@@ -261,7 +262,7 @@ export function useQQMail(canPreview: boolean) {
     ? snapshot.items.find((item) => item.id === previewWindow.id && item.unread) ?? null : null;
 
   return {
-    snapshot, busy, actionError, connect, setEnabled, refresh, disconnect, openMail, openHelp,
+    snapshot, busy, actionError, connect, setEnabled, refresh, markAllRead, disconnect, openMail, openHelp,
     selectedMail, content, reading, readError, readMail, closeReader, openLink,
     readerHeight, setReaderHeight,
     preview, previewReceivedAt: preview ? previewWindow?.receivedAt ?? null : null,
@@ -423,7 +424,7 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
   onRead?: (message: MailMessage) => void;
   onBack?: () => void;
 }) {
-  const { snapshot, busy, actionError, setEnabled, refresh, disconnect, openMail, openHelp } = controller;
+  const { snapshot, busy, actionError, setEnabled, refresh, markAllRead, disconnect, openMail, openHelp } = controller;
   const t = useTranslation();
   const showForm = !snapshot.configured || snapshot.status === "authRequired";
   const error = actionError || snapshot.error;
@@ -485,6 +486,7 @@ export function QQMailPanel({ controller, navigation, onRead, onBack }: {
           {snapshot.configured && <button className="icon-button message-receiver-toggle" type="button" role="switch" aria-checked={snapshot.enabled} aria-label={t.mail.receive} title={snapshot.enabled ? t.mail.pause : t.mail.resume} disabled={busy || snapshot.status === "authRequired"} onClick={() => void setEnabled(!snapshot.enabled)}><Power size={15} strokeWidth={1.8} /></button>}
           {showForm && <button className="icon-button" type="button" title={t.mail.help} aria-label={t.mail.helpLabel} onClick={() => void openHelp()}><CircleHelp size={16} strokeWidth={1.8} /></button>}
           <button className="icon-button" type="button" title={t.mail.open} aria-label={t.mail.openLabel} onClick={() => void openMail()}><ArrowUpRight size={16} strokeWidth={1.8} /></button>
+          {snapshot.configured && (snapshot.unreadCount ?? 0) > 0 && <button className="icon-button" type="button" title={t.mail.markAllRead} aria-label={t.mail.markAllRead} disabled={busy || snapshot.syncing || !snapshot.enabled || snapshot.status === "authRequired"} onClick={() => void markAllRead()}><CheckCheck size={16} strokeWidth={1.8} /></button>}
           {snapshot.configured && <button className="icon-button" type="button" title={snapshot.lastSyncedAt === null ? t.mail.refresh : t.mail.lastSynced(formatMailTime(snapshot.lastSyncedAt, t.localeTag))} aria-label={t.mail.refreshLabel} disabled={busy || snapshot.syncing || !snapshot.enabled || snapshot.status === "authRequired"} onClick={() => void refresh()}><RefreshCw size={16} strokeWidth={1.8} className={snapshot.syncing ? "qq-mail-spinning" : undefined} /></button>}
           {snapshot.configured && <button className="icon-button" type="button" title={t.mail.disconnect} aria-label={t.mail.disconnectLabel} disabled={busy} onClick={() => void disconnect()}><Unplug size={16} strokeWidth={1.8} /></button>}
         </div>

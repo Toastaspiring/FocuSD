@@ -1797,6 +1797,7 @@ pub fn run() {
             qq_mail::connect_qq_mail,
             qq_mail::set_qq_mail_enabled,
             qq_mail::refresh_qq_mail,
+            qq_mail::mark_all_qq_mail_read,
             qq_mail::read_qq_mail,
             qq_mail::disconnect_qq_mail,
             wechat_reminders::get_wechat_reminder_state,
