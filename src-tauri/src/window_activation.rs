@@ -22,7 +22,9 @@ struct Search<'a> {
     found: Option<HWND>,
 }
 
-/// Focuses an existing top-level window of `exe`. Returns false when none is open.
+/// Brings an existing top-level window of `exe` to the front. Returns true when
+/// such a window exists (whether or not the OS granted the foreground switch),
+/// so the caller never launches a second instance while the app is open.
 pub fn activate_app_window(exe: &Path) -> bool {
     if exe.as_os_str().is_empty() {
         return false;
@@ -42,7 +44,8 @@ pub fn activate_app_window(exe: &Path) -> bool {
         if IsIconic(window).as_bool() {
             let _ = ShowWindow(window, SW_RESTORE);
         }
-        SetForegroundWindow(window).as_bool()
+        let _ = SetForegroundWindow(window);
+        true
     }
 }
 
