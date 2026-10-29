@@ -30,7 +30,8 @@ export function MessagesPanel({ qqMail, qqNotifications, wechatReminders, source
   // Each app that has fired a notification gets its own tab, built on the fly.
   const notifApps = groupNotificationApps(qq.items);
   const showWechat = wechatReminders.snapshot.enabled;
-  const showMail = mail.configured;
+  // Mail only earns a tab while it actually has unread mail.
+  const showMail = mail.configured && (mail.unreadCount ?? 0) > 0;
   const visibleSources: MessageView[] = [
     ...notifApps.map((app) => `${NOTIF_PREFIX}${app.appId}` as MessageView),
     ...(showWechat ? ["wechat" as const] : []),
