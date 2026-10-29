@@ -186,8 +186,14 @@ export function useQQNotifications(canPreview: boolean) {
     setPreviewWindow(null);
   }), [acceptSnapshot, run]);
 
+  const openApp = useCallback((appId: string) => {
+    if (!isTauri() || !appId) return;
+    // Best effort: launch the sending app; a missing launcher is a silent no-op.
+    void invoke("open_notification_app", { appId }).catch(() => {});
+  }, []);
+
   return {
-    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear,
+    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openApp,
     previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null
@@ -220,7 +226,7 @@ export function QQNotificationControls({ controller, compact = false }: { contro
 }
 
 export function QQNotificationPanel({ controller, navigation, appId }: { controller: QQNotificationsController; navigation: ReactNode; appId?: string }) {
-  const { snapshot, busy, actionError, refresh, clear } = controller;
+  const { snapshot, busy, actionError, refresh, clear, openApp } = controller;
   const t = useTranslation();
   const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? t.qq.status[snapshot.status] : null);
   const items = appId ? snapshot.items.filter((item) => item.appId === appId) : snapshot.items;
@@ -239,12 +245,14 @@ export function QQNotificationPanel({ controller, navigation, appId }: { control
         {items.length === 0 ? (
           <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>{t.common.noMessages}</span></div>
         ) : items.map((item) => (
-          <article className="qq-panel__item" key={item.id} role="listitem">
-            <div className="qq-notification-item">
-              {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
-              <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
-              {item.body && <p>{item.body}</p>}
-            </div>
+          <article className="qq-panel__item qq-notification" key={item.id} role="listitem">
+            <button type="button" className="qq-notification__open" onClick={() => openApp(item.appId)} title={t.qq.openNotification(item.title)} aria-label={t.qq.openNotification(item.title)}>
+              <div className="qq-notification-item">
+                {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
+                <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
+                {item.body && <p>{item.body}</p>}
+              </div>
+            </button>
           </article>
         ))}
       </div>

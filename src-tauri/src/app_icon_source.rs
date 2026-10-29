@@ -43,11 +43,16 @@ const PKEY_APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
     fmtid: GUID::from_u128(0x9F4C2855_9F79_4B39_A8D0_E1D42DE1D5F3),
     pid: 5,
 };
-type ShortcutMap = Vec<(String, PathBuf, i32)>;
+struct Shortcut {
+    aumid: String,
+    lnk: PathBuf,
+    icon: PathBuf,
+    index: i32,
+}
+type ShortcutMap = Vec<Shortcut>;
 static SHORTCUT_MAP: OnceLock<Mutex<Option<ShortcutMap>>> = OnceLock::new();
 
-/// Returns the PNG bytes of the icon the given AUMID's shortcut points at, if any.
-pub fn icon_png_for_aumid(aumid: &str) -> Option<Vec<u8>> {
+fn with_shortcut<R>(aumid: &str, f: impl FnOnce(&Shortcut) -> R) -> Option<R> {
     if aumid.is_empty() {
         return None;
     }
@@ -56,11 +61,22 @@ pub fn icon_png_for_aumid(aumid: &str) -> Option<Vec<u8>> {
     if guard.is_none() {
         *guard = Some(build_shortcut_map());
     }
-    let (_, source, index) = guard
+    guard
         .as_ref()?
         .iter()
-        .find(|(id, _, _)| id.eq_ignore_ascii_case(aumid))?;
-    unsafe { extract_icon_png(source, *index) }
+        .find(|shortcut| shortcut.aumid.eq_ignore_ascii_case(aumid))
+        .map(f)
+}
+
+/// Returns the PNG bytes of the icon the given AUMID's shortcut points at, if any.
+pub fn icon_png_for_aumid(aumid: &str) -> Option<Vec<u8>> {
+    let (icon, index) = with_shortcut(aumid, |shortcut| (shortcut.icon.clone(), shortcut.index))?;
+    unsafe { extract_icon_png(&icon, index) }
+}
+
+/// Returns the Start Menu shortcut that launches the given AUMID's app, if any.
+pub fn launch_target_for_aumid(aumid: &str) -> Option<PathBuf> {
+    with_shortcut(aumid, |shortcut| shortcut.lnk.clone())
 }
 
 fn start_menu_dirs() -> Vec<PathBuf> {
@@ -112,7 +128,7 @@ fn wide(path: &Path) -> Vec<u16> {
         .collect()
 }
 
-unsafe fn read_shortcut(path: &Path) -> Option<(String, PathBuf, i32)> {
+unsafe fn read_shortcut(path: &Path) -> Option<Shortcut> {
     let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
     let persist: IPersistFile = link.cast().ok()?;
     persist.Load(PCWSTR(wide(path).as_ptr()), STGM_READ).ok()?;
@@ -139,7 +155,7 @@ unsafe fn read_shortcut(path: &Path) -> Option<(String, PathBuf, i32)> {
     } else {
         None
     };
-    let source = match icon_path {
+    let icon = match icon_path {
         Some(path) => path,
         None => {
             let mut target = [0u16; 260];
@@ -153,7 +169,12 @@ unsafe fn read_shortcut(path: &Path) -> Option<(String, PathBuf, i32)> {
             PathBuf::from(OsString::from_wide(&target[..len]))
         }
     };
-    Some((aumid, source, index))
+    Some(Shortcut {
+        aumid,
+        lnk: path.to_path_buf(),
+        icon,
+        index,
+    })
 }
 
 unsafe fn extract_icon_png(source: &Path, index: i32) -> Option<Vec<u8>> {

@@ -269,6 +269,16 @@ pub fn open_qq_notification_settings(app: AppHandle, access: bool) -> Result<(),
         .map_err(|error| format!("无法打开 Windows 通知设置：{error}"))
 }
 
+/// Launches the app that sent a notification, via its Start Menu shortcut.
+#[tauri::command]
+pub fn open_notification_app(app: AppHandle, app_id: String) -> Result<(), String> {
+    let target = crate::app_icon_source::launch_target_for_aumid(&app_id)
+        .ok_or("No launcher found for this app.")?;
+    app.opener()
+        .open_path(target.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|error| format!("Could not open the app: {error}"))
+}
+
 fn publish(
     service: &NotificationService,
     snapshot: NotificationSnapshot,
