@@ -860,6 +860,43 @@ input,
   border-radius: 4px;
 }
 
+/* Collapsed-island notification icons (phone status-bar style). */
+.island-notif-stack {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.island-notif-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.island-notif-icon:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.island-notif-icon img {
+  display: block;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.island-notif-icon .notif-monogram {
+  width: 16px;
+  height: 16px;
+}
+
 .icon-button:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.15);

@@ -55,7 +55,8 @@ import {
   type QQNotificationsController,
 } from "./QQNotifications";
 import { MailAccountSettings, useQQMail, type QQMailController } from "./QQMail";
-import { MessagesPanel, messagePanelHeight, type MessageView } from "./Messages";
+import { MessagesPanel, messagePanelHeight, monogramColor, monogramLetter, type MessageView } from "./Messages";
+import { groupNotificationApps } from "./QQNotifications";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { CollapsedMessageContent } from "./CollapsedMessageContent";
 import { latestMessagePreview, messagePreviewText } from "./messagePreview";
@@ -1128,6 +1129,8 @@ export function IslandShell({
   const [isPreparing, setIsPreparing] = useState(isTauri);
   const qqPreview = qqNotifications.preview;
   const qqNotificationCount = qqNotifications.snapshot.items.length;
+  // Phone-style: show up to two sending-app icons on the collapsed island.
+  const collapsedNotifApps = groupNotificationApps(qqNotifications.snapshot.items).slice(0, 2);
   const [latestPreviewAt, setLatestPreviewAt] = useState(0);
   const preview = latestMessagePreview([
     qqPreview ? { ...qqPreview, source: "qq", receivedAt: qqNotifications.previewReceivedAt ?? 0 } : null,
@@ -1398,6 +1401,24 @@ export function IslandShell({
               <MessageSourceIcon source="qqMail" email={qqMail.snapshot.email} size={16} />
               <span className="island-message-button__dot" aria-hidden="true" />
             </button>
+          )}
+          {collapsedNotifApps.length > 0 && (
+            <div className="island-notif-stack">
+              {collapsedNotifApps.map((app) => (
+                <button
+                  key={app.appId}
+                  className="island-notif-icon"
+                  type="button"
+                  title={app.name}
+                  aria-label={app.name}
+                  onClick={(event) => { event.stopPropagation(); onOpenMessages(`notif:${app.appId}`); }}
+                >
+                  {app.icon
+                    ? <img src={app.icon} alt="" aria-hidden="true" width={16} height={16} draggable={false} />
+                    : <span className="notif-monogram" style={{ background: monogramColor(app.name) }} aria-hidden="true">{monogramLetter(app.name)}</span>}
+                </button>
+              ))}
+            </div>
           )}
           <MusicWaveButton
             isAvailable={mediaState.available || mediaState.audioActive}

@@ -10,12 +10,12 @@ import "./Messages.css";
 const NOTIF_PREFIX = "notif:";
 export type MessageView = MessageSource | `${typeof NOTIF_PREFIX}${string}`;
 
-function monogramLetter(name: string): string {
+export function monogramLetter(name: string): string {
   const first = Array.from(name.trim())[0];
   return first ? first.toUpperCase() : "?";
 }
 
-function monogramColor(name: string): string {
+export function monogramColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   return `hsl(${hash % 360} 42% 42%)`;
