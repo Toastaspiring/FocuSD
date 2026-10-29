@@ -221,12 +221,13 @@ export function useQQMail(canPreview: boolean) {
       if (requestId !== readerRequestRef.current) return false;
       if (next.id !== message.id) throw new Error(t.mail.changed);
       setContent(next);
-      // The mail is now marked read on the server; drop it from the unread list.
-      setSnapshot((current) => current.items.some((item) => item.id === message.id)
+      // The mail is now read on the server; keep it in the list (so it can be
+      // re-read) but mark it read and drop it from the unread count.
+      setSnapshot((current) => current.items.some((item) => item.id === message.id && item.unread)
         ? {
             ...current,
             revision: current.revision + 1,
-            items: current.items.filter((item) => item.id !== message.id),
+            items: current.items.map((item) => item.id === message.id ? { ...item, unread: false } : item),
             unreadCount: current.unreadCount != null ? Math.max(0, current.unreadCount - 1) : current.unreadCount,
           }
         : current);

@@ -1078,19 +1078,14 @@ fn fetch_inbox<T: Read + Write>(session: &mut Session<T>) -> Result<Inbox, MailF
     let unseen = session
         .uid_search("UNSEEN")
         .map_err(|_| MailFailure::network())?;
-    // Only unread mail is listed: fetch the most recent unseen messages by UID.
+    // The most recent mail is listed whether read or unread, so a message can be
+    // re-read later; only the unseen ones are counted as a notification.
     let mut items = Vec::new();
-    if !unseen.is_empty() {
-        let mut uids: Vec<u32> = unseen.iter().copied().collect();
-        uids.sort_unstable_by(|a, b| b.cmp(a));
-        uids.truncate(MAX_ITEMS as usize);
-        let set = uids
-            .iter()
-            .map(|uid| uid.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
+    if mailbox.exists > 0 {
+        let start = mailbox.exists.saturating_sub(MAX_ITEMS - 1).max(1);
+        let set = format!("{start}:{}", mailbox.exists);
         let messages = session
-            .uid_fetch(set, HEADER_QUERY)
+            .fetch(set, HEADER_QUERY)
             .map_err(|_| MailFailure::network())?;
         for message in messages.iter() {
             let Some(uid) = message.uid else {
