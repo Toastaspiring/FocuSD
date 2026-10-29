@@ -97,7 +97,7 @@ const zhCN: Translations = {
     loading: "正在加载正文",
     emptyHtml: "这封邮件没有可显示的文字，请在网页中查看。",
     emptyText: "这封邮件没有文字正文。",
-    notice: "仅预览，不自动标为已读 · 附件请在网页查看",
+    notice: "打开后标为已读 · 附件请在网页查看",
     receive: "接收 QQ 邮箱",
     pause: "暂停接收邮件",
     resume: "接收邮件",

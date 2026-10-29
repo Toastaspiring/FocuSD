@@ -220,6 +220,15 @@ export function useQQMail(canPreview: boolean) {
       if (requestId !== readerRequestRef.current) return false;
       if (next.id !== message.id) throw new Error(t.mail.changed);
       setContent(next);
+      // The mail is now marked read on the server; drop it from the unread list.
+      setSnapshot((current) => current.items.some((item) => item.id === message.id)
+        ? {
+            ...current,
+            revision: current.revision + 1,
+            items: current.items.filter((item) => item.id !== message.id),
+            unreadCount: current.unreadCount != null ? Math.max(0, current.unreadCount - 1) : current.unreadCount,
+          }
+        : current);
       return true;
     } catch (error) {
       if (requestId === readerRequestRef.current) setReadError(error instanceof Error ? error.message : String(error));

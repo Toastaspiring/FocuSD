@@ -886,8 +886,9 @@ fn fetch_content<T: Read + Write>(
     message_id: &str,
 ) -> Result<MailContent, String> {
     let (validity, uid) = parse_message_id(message_id)?;
+    // Read-write select so the message can be flagged \Seen once it is opened.
     let mailbox = session
-        .examine("INBOX")
+        .select("INBOX")
         .map_err(|_| "无法打开收件箱，请稍后重试。")?;
     if mailbox.uid_validity != Some(validity) {
         return Err("收件箱已更新，请刷新列表后重新打开邮件。".into());
@@ -955,6 +956,8 @@ fn fetch_content<T: Read + Write>(
     let content = parsed
         .get_body()
         .map_err(|_| "无法解码邮件正文，请在网页中查看。")?;
+    // Opening a mail marks it read, so it drops out of the unread list.
+    let _ = session.uid_store(uid.to_string(), "+FLAGS (\\Seen)");
     Ok(MailContent {
         id: message_id.into(),
         content,
@@ -973,18 +976,23 @@ fn fetch_inbox<T: Read + Write>(session: &mut Session<T>) -> Result<Inbox, MailF
     let unseen = session
         .uid_search("UNSEEN")
         .map_err(|_| MailFailure::network())?;
+    // Only unread mail is listed: fetch the most recent unseen messages by UID.
     let mut items = Vec::new();
-    if mailbox.exists > 0 {
-        let first = mailbox.exists.saturating_sub(MAX_ITEMS - 1).max(1);
-        let messages = session
-            .fetch(format!("{first}:{}", mailbox.exists), HEADER_QUERY)
-            .map_err(|_| MailFailure::network())?;
-        for message in messages
+    if !unseen.is_empty() {
+        let mut uids: Vec<u32> = unseen.iter().copied().collect();
+        uids.sort_unstable_by(|a, b| b.cmp(a));
+        uids.truncate(MAX_ITEMS as usize);
+        let set = uids
             .iter()
-            .filter(|message| (first..=mailbox.exists).contains(&message.message))
-        {
+            .map(|uid| uid.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let messages = session
+            .uid_fetch(set, HEADER_QUERY)
+            .map_err(|_| MailFailure::network())?;
+        for message in messages.iter() {
             let Some(uid) = message.uid else {
-                return Err(MailFailure::network());
+                continue;
             };
             // Unsolicited flag-only FETCH responses must not become blank list entries.
             let Some(header) = message.header() else {
@@ -1277,7 +1285,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_only_the_plain_body_and_never_marks_mail_read() {
+    fn reads_only_the_plain_body_and_marks_mail_read() {
         let body = "5Lit5paH";
         let structure = format!(
             "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"UTF-8\") NIL NIL \"BASE64\" {} 1)",
@@ -1296,7 +1304,9 @@ mod tests {
         let commands = String::from_utf8(output.lock().unwrap().clone()).unwrap();
         assert!(commands.contains("UID FETCH 9 (UID BODYSTRUCTURE)"));
         assert!(commands.contains("BODY.PEEK[1.MIME]<0.65537> BODY.PEEK[1]<0.524289>"));
-        for forbidden in [" SELECT ", " STORE ", " EXPUNGE", "BODY[]", "RFC822 "] {
+        // Opening a mail marks it \Seen (read) but still never downloads the full body.
+        assert!(commands.contains("UID STORE 9 +FLAGS (\\Seen)"), "{commands}");
+        for forbidden in [" EXPUNGE", "BODY[]", "RFC822 "] {
             assert!(!commands.contains(forbidden), "{commands}");
         }
     }

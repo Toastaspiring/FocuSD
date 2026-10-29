@@ -97,7 +97,7 @@ const en: Translations = {
     loading: "Loading email",
     emptyHtml: "No text to display. View this email in your browser.",
     emptyText: "This email has no text body.",
-    notice: "Preview only, stays unread · View attachments in your browser",
+    notice: "Marked read on open · View attachments in your browser",
     receive: "Receive QQ Mail",
     pause: "Pause mail notifications",
     resume: "Receive mail notifications",
