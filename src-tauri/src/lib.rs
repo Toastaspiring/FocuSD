@@ -1,3 +1,4 @@
+mod app_icon_source;
 mod clipboard_history;
 mod media_control;
 mod notification_diagnostics;

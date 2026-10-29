@@ -2,17 +2,14 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    os::windows::process::CommandExt,
-    path::PathBuf,
-    process::{Command, Stdio},
     sync::{mpsc, Arc, Mutex, OnceLock},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 use windows::{
-    core::{Interface, HRESULT, HSTRING},
+    core::Interface,
     ApplicationModel::AppInfo,
     Foundation::Size,
     Storage::Streams::{DataReader, IInputStream},
@@ -20,15 +17,12 @@ use windows::{
     UI::Notifications::{
         KnownNotificationBindings,
         Management::{UserNotificationListener, UserNotificationListenerAccessStatus},
-        NotificationKinds, NotificationSetting, ToastNotificationManager, UserNotification,
+        NotificationKinds, UserNotification,
     },
 };
 
-const QQ_APP_ID: &str = "QQ";
 const EVENT_NAME: &str = "qq-notifications-changed";
 const MAX_ITEMS: usize = 20;
-const REGISTRATION_REPAIR: &str =
-    include_str!("../../scripts/repair-qq-notification-registration.ps1");
 const DIAGNOSTIC_TITLE: &str = "FocuSD QQ 通知诊断";
 const DIAGNOSTIC_BODY: &str = "这是本机通道测试，不是聊天消息。";
 static SERVICE: OnceLock<Arc<NotificationService>> = OnceLock::new();
@@ -296,8 +290,6 @@ fn publish(
 }
 
 fn monitor(service: Arc<NotificationService>, receiver: mpsc::Receiver<()>) {
-    let mut repair_generation = None;
-    let mut repair_error = None;
     loop {
         let (enabled, generation) = match service.state.lock() {
             Ok(state) => (state.snapshot.enabled, state.generation),
@@ -310,25 +302,6 @@ fn monitor(service: Arc<NotificationService>, receiver: mpsc::Receiver<()>) {
             continue;
         }
         let poll = read_notifications();
-        let channel_error = if matches!(&poll, Ok((NotificationStatus::Listening, _))) {
-            let setting = qq_notification_setting();
-            if repair_generation != Some(generation) {
-                repair_error = None;
-                if should_repair_registration(&setting) {
-                    repair_generation = Some(generation);
-                    repair_error = repair_registration(&service, generation).err();
-                }
-            }
-            let setting = qq_notification_setting();
-            if matches!(setting, Ok(NotificationSetting::Enabled)) {
-                repair_error = None;
-                None
-            } else {
-                repair_error.clone().or_else(|| registration_error(setting))
-            }
-        } else {
-            None
-        };
         let change = {
             let Ok(mut state) = service.state.lock() else {
                 return;
@@ -340,7 +313,7 @@ fn monitor(service: Arc<NotificationService>, receiver: mpsc::Receiver<()>) {
             let newest = match poll {
                 Ok((NotificationStatus::Listening, current)) => {
                     state.snapshot.status = NotificationStatus::Listening;
-                    state.snapshot.error = channel_error;
+                    state.snapshot.error = None;
                     let newest = state.buffer.sync(current);
                     state.snapshot.items = state.buffer.items.clone();
                     newest
@@ -372,91 +345,6 @@ fn monitor(service: Arc<NotificationService>, receiver: mpsc::Receiver<()>) {
             == Err(mpsc::RecvTimeoutError::Disconnected)
         {
             return;
-        }
-    }
-}
-
-fn qq_notification_setting() -> windows::core::Result<NotificationSetting> {
-    unsafe { RoInitialize(RO_INIT_MULTITHREADED) }?;
-    let _apartment = WinRT;
-    ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(QQ_APP_ID))?.Setting()
-}
-
-fn should_repair_registration(setting: &windows::core::Result<NotificationSetting>) -> bool {
-    setting
-        .as_ref()
-        .is_err_and(|error| error.code() == HRESULT(0x80070490u32 as i32))
-}
-
-fn registration_error(setting: windows::core::Result<NotificationSetting>) -> Option<String> {
-    match setting {
-        Ok(NotificationSetting::Enabled) => None,
-        Ok(NotificationSetting::DisabledForApplication) => {
-            Some("QQ 的 Windows 通知已关闭，请在系统通知设置中开启。".into())
-        }
-        Ok(NotificationSetting::DisabledForUser) => {
-            Some("Windows 系统通知已关闭，请在系统通知设置中开启。".into())
-        }
-        Ok(NotificationSetting::DisabledByGroupPolicy) => {
-            Some("管理员策略禁止了 Windows 通知，请联系管理员。".into())
-        }
-        Ok(_) => Some("QQ 当前安装方式不支持系统通知，请检查或更新 QQ。".into()),
-        Err(error) => Some(format!(
-            "QQ 通知通道尚未就绪，请确认已安装 QQ；可关闭后重新开启接收以重试：{error}"
-        )),
-    }
-}
-
-fn repair_registration(service: &NotificationService, generation: u64) -> Result<(), String> {
-    // Embed the existing guarded repair so installed builds do not depend on the repository.
-    let script = format!("& {{\n{REGISTRATION_REPAIR}\n}} -Repair");
-    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let system_root = std::env::var_os("SystemRoot").ok_or("无法定位 Windows 通知修复工具。")?;
-    let executable =
-        PathBuf::from(system_root).join("System32/WindowsPowerShell/v1.0/powershell.exe");
-    let mut child = Command::new(executable)
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-EncodedCommand",
-            &STANDARD.encode(bytes),
-        ])
-        .creation_flags(0x08000000)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("无法启动 QQ 通知自动修复：{error}"))?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                return if status.success() {
-                    Ok(())
-                } else {
-                    Err(
-                        "QQ 通知自动修复未完成，请确认 QQ 安装正常；可关闭后重新开启接收以重试。"
-                            .into(),
-                    )
-                }
-            }
-            Ok(None)
-                if Instant::now() < deadline
-                    && service.state.lock().is_ok_and(|state| {
-                        state.snapshot.enabled && state.generation == generation
-                    }) =>
-            {
-                thread::sleep(Duration::from_millis(50))
-            }
-            result => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(match result {
-                    Err(error) => format!("QQ 通知自动修复失败：{error}"),
-                    _ => "QQ 通知自动修复已停止或超时，可关闭后重新开启接收以重试。".into(),
-                });
-            }
         }
     }
 }
@@ -575,7 +463,12 @@ fn app_icon(app_info: &AppInfo, aumid: &str) -> Option<String> {
             return cached.clone();
         }
     }
-    let icon = read_app_logo(app_info);
+    // Packaged apps expose a logo directly; plain Win32 apps (Chrome, Notion,
+    // classic Outlook, …) don't, so fall back to their Start Menu shortcut icon.
+    let icon = read_app_logo(app_info).or_else(|| {
+        crate::app_icon_source::icon_png_for_aumid(aumid)
+            .map(|png| format!("data:image/png;base64,{}", STANDARD.encode(&png)))
+    });
     if let Ok(mut guard) = cache.lock() {
         guard.insert(aumid.to_string(), icon.clone());
     }
@@ -658,43 +551,6 @@ mod tests {
         assert_eq!(report["itemCount"], 1);
         assert!(!report.to_string().contains("private-"));
         assert!(report.get("items").is_none());
-    }
-
-    #[test]
-    fn registration_repair_only_handles_missing_sender_records() {
-        assert!(should_repair_registration(&Err(
-            windows::core::Error::from_hresult(HRESULT(0x80070490u32 as i32),)
-        )));
-        assert!(!should_repair_registration(&Err(
-            windows::core::Error::from_hresult(HRESULT(0x80070005u32 as i32),)
-        )));
-        for setting in [
-            NotificationSetting::Enabled,
-            NotificationSetting::DisabledForApplication,
-            NotificationSetting::DisabledForUser,
-            NotificationSetting::DisabledByGroupPolicy,
-            NotificationSetting::DisabledByManifest,
-        ] {
-            assert!(!should_repair_registration(&Ok(setting)));
-        }
-    }
-
-    #[test]
-    fn blocked_notification_channels_report_the_actionable_cause() {
-        assert!(registration_error(Ok(NotificationSetting::Enabled)).is_none());
-        assert!(
-            registration_error(Ok(NotificationSetting::DisabledForApplication))
-                .unwrap()
-                .contains("QQ 的 Windows 通知已关闭")
-        );
-        assert!(registration_error(Ok(NotificationSetting::DisabledForUser))
-            .unwrap()
-            .contains("Windows 系统通知已关闭"));
-        assert!(
-            registration_error(Ok(NotificationSetting::DisabledByGroupPolicy))
-                .unwrap()
-                .contains("管理员")
-        );
     }
 
     fn notice(id: u32, body: &str) -> QQNotification {

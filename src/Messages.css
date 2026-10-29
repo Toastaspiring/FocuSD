@@ -1,9 +1,102 @@
-.message-overview__empty { padding: 9px 8px; color: rgba(241, 246, 250, .5); font-size: 12px; }
-.message-overview__item > button { display: flex; align-items: center; gap: 12px; padding: 12px 8px; }
-.message-overview__text { flex: 1; min-width: 0; }
-.message-overview__text strong { display: flex; flex: 1; align-items: center; gap: 6px; }
-.message-overview__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-overview__text p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.message-overview__chevron { flex: 0 0 auto; color: rgba(241, 246, 250, .35); }
-.message-overview__connections { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 8px; }
-.message-overview__connections .message-action { color: rgba(241, 246, 250, .65); }
+.message-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0 2px;
+}
+
+.message-sources {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.message-sources button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 150px;
+  min-height: 30px;
+  padding: 5px 9px;
+  color: rgba(241, 246, 250, .5);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+/* Keep the app name from stretching the tab; the count/dot stay fully visible. */
+.message-sources button > span:not(.message-source-count):not(.message-source-dot) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-sources button:hover {
+  color: rgba(241, 246, 250, .85);
+}
+
+.message-sources button[aria-pressed="true"] {
+  color: #fff;
+  background: rgba(255, 255, 255, .07);
+}
+
+.message-sources button:focus-visible {
+  outline: 2px solid rgba(143, 216, 255, .88);
+  outline-offset: 2px;
+}
+
+.message-source-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  color: rgba(241, 246, 250, .9);
+  background: rgba(255, 255, 255, .12);
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-source-dot {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #a9e6ca;
+}
+
+/* Fallback avatar for apps that expose no icon: the first letter on a
+   deterministic colour, so each app still reads as distinct. */
+.notif-monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-sources button {
+    transition: none;
+  }
+}
