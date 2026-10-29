@@ -8,9 +8,19 @@
 
 use std::path::PathBuf;
 
-/// Looks up a notification by its platform id and returns `(app primary id,
-/// launch argument)` from the Windows notification store.
-pub fn launch_for_db_id(db_id: i64) -> Option<(String, String)> {
+/// The activation and dismissal details Windows keeps for one notification.
+pub struct Record {
+    /// The sending app's AppUserModelId (handler primary id).
+    pub app: String,
+    /// The toast's `launch` argument — the deep link Windows activates on click.
+    pub launch: String,
+    /// The toast tag and group, used to remove it from the hub.
+    pub tag: String,
+    pub group: String,
+}
+
+/// Looks up a notification by its platform id in the Windows notification store.
+pub fn record_for_db_id(db_id: i64) -> Option<Record> {
     let source = PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
         .join(r"Microsoft\Windows\Notifications\wpndatabase.db");
     // The live DB is held open by Windows and may use a WAL, so copy the db and
@@ -29,18 +39,23 @@ pub fn launch_for_db_id(db_id: i64) -> Option<(String, String)> {
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .ok()?;
-    let (payload, app): (Vec<u8>, Option<String>) = connection
-        .query_row(
-            "SELECT n.Payload, nh.PrimaryId FROM Notification n \
-             LEFT JOIN NotificationHandler nh ON n.HandlerId = nh.RecordId \
-             WHERE n.Id = ?1",
-            [db_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .ok()?;
+    let (payload, app, tag, group): (Vec<u8>, Option<String>, Option<String>, Option<String>) =
+        connection
+            .query_row(
+                "SELECT n.Payload, nh.PrimaryId, n.Tag, n.\"Group\" FROM Notification n \
+                 LEFT JOIN NotificationHandler nh ON n.HandlerId = nh.RecordId \
+                 WHERE n.Id = ?1",
+                [db_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .ok()?;
     let xml = String::from_utf8_lossy(&payload);
-    let launch = extract_launch(&xml)?;
-    Some((app.unwrap_or_default(), launch))
+    Some(Record {
+        app: app.unwrap_or_default(),
+        launch: extract_launch(&xml).unwrap_or_default(),
+        tag: tag.unwrap_or_default(),
+        group: group.unwrap_or_default(),
+    })
 }
 
 fn append_suffix(path: &std::path::Path, suffix: &str) -> PathBuf {

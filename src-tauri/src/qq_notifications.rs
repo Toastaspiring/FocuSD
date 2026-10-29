@@ -11,15 +11,22 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 use windows::{
-    core::Interface,
+    core::{Interface, GUID, HSTRING, PCWSTR},
     ApplicationModel::AppInfo,
     Foundation::Size,
     Storage::Streams::{DataReader, IInputStream},
-    Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
+    Win32::{
+        System::{
+            Com::{CoCreateInstance, CLSCTX_LOCAL_SERVER},
+            Registry::{RegGetValueW, HKEY_CLASSES_ROOT, RRF_RT_REG_SZ},
+            WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED},
+        },
+        UI::Notifications::INotificationActivationCallback,
+    },
     UI::Notifications::{
         KnownNotificationBindings,
         Management::{UserNotificationListener, UserNotificationListenerAccessStatus},
-        NotificationKinds, UserNotification,
+        NotificationKinds, ToastNotificationManager, UserNotification,
     },
 };
 
@@ -271,37 +278,95 @@ pub fn open_qq_notification_settings(app: AppHandle, access: bool) -> Result<(),
         .map_err(|error| format!("无法打开 Windows 通知设置：{error}"))
 }
 
-/// Opens a clicked notification. For a Chromium browser this replays Windows'
-/// own deep-link activation (`--notification-launch-id`) so the exact page or
-/// conversation opens in the right profile; otherwise it focuses the sending
-/// app's window, launching it only when none is open.
+/// Opens a clicked notification the way the Windows hub does: it replays the
+/// toast's own activation (the deep link) — a Chromium browser via
+/// `--notification-launch-id`, any app with a registered COM activator via that
+/// callback — and otherwise focuses the sending app. Either way the notification
+/// is then dismissed from the hub and the island, just like a real click.
 #[tauri::command]
 pub fn open_notification(app: AppHandle, id: String, app_id: String) -> Result<(), String> {
-    if let Some(exe) = crate::app_icon_source::target_exe_for_aumid(&app_id) {
-        if is_chromium(&exe) {
-            if let Some(launch) = db_id_from(&id)
-                .and_then(|db_id| crate::notification_launch::launch_for_db_id(db_id))
-                .map(|(_, launch)| launch)
-                .filter(|launch| is_safe_launch(launch))
-            {
-                if Command::new(&exe)
+    let record = db_id_from(&id).and_then(crate::notification_launch::record_for_db_id);
+    let launch = record
+        .as_ref()
+        .map(|record| record.launch.clone())
+        .filter(|launch| is_safe_launch(launch));
+
+    let activated = activate(&app, &app_id, launch.as_deref());
+
+    if let Some(record) = &record {
+        if !record.tag.is_empty() {
+            remove_from_hub(&record.tag, &record.group, &app_id);
+        }
+    }
+    remove_item(&id);
+
+    activated.map_err(|error| error)
+}
+
+fn activate(app: &AppHandle, app_id: &str, launch: Option<&str>) -> Result<(), String> {
+    let exe = crate::app_icon_source::target_exe_for_aumid(app_id);
+    if let Some(launch) = launch {
+        // A Chromium browser activates its notification through the command line.
+        if let Some(exe) = &exe {
+            if is_chromium(exe)
+                && Command::new(exe)
                     .arg(format!("--notification-launch-id={launch}"))
                     .spawn()
                     .is_ok()
-                {
-                    return Ok(());
-                }
+            {
+                return Ok(());
             }
         }
-        if crate::window_activation::activate_app_window(&exe) {
+        // Any app with a registered toast activator goes through its callback.
+        if let Some(clsid) = custom_activator(app_id) {
+            if com_activate(clsid, app_id, launch) {
+                return Ok(());
+            }
+        }
+    }
+    if let Some(exe) = &exe {
+        if crate::window_activation::activate_app_window(exe) {
             return Ok(());
         }
     }
-    let shortcut = crate::app_icon_source::launch_target_for_aumid(&app_id)
+    let shortcut = crate::app_icon_source::launch_target_for_aumid(app_id)
         .ok_or("No launcher found for this app.")?;
     app.opener()
         .open_path(shortcut.to_string_lossy().to_string(), None::<&str>)
         .map_err(|error| format!("Could not open the app: {error}"))
+}
+
+/// Removes a notification from the Windows Action Center by its tag and group.
+fn remove_from_hub(tag: &str, group: &str, app_id: &str) {
+    let _ = ensure_winrt();
+    if let Ok(history) = ToastNotificationManager::History() {
+        let _ = history.RemoveGroupedTagWithId(
+            &HSTRING::from(tag),
+            &HSTRING::from(group),
+            &HSTRING::from(app_id),
+        );
+    }
+}
+
+/// Drops a notification from the island's own list once it has been opened.
+fn remove_item(id: &str) {
+    let Ok(service) = service() else {
+        return;
+    };
+    let snapshot = {
+        let Ok(mut state) = service.state.lock() else {
+            return;
+        };
+        let before = state.snapshot.items.len();
+        state.buffer.items.retain(|item| item.id != id);
+        state.snapshot.items.retain(|item| item.id != id);
+        if state.snapshot.items.len() == before {
+            return;
+        }
+        state.snapshot.revision += 1;
+        state.snapshot.clone()
+    };
+    publish(&service, snapshot, None);
 }
 
 /// The middle field of a `{aumid}:{id}:{ticks}` notification id is the store's
@@ -328,6 +393,58 @@ fn is_safe_launch(launch: &str) -> bool {
         && launch.len() <= 4096
         && !launch.starts_with('-')
         && !launch.chars().any(char::is_control)
+}
+
+/// The CLSID an app registers so Windows can activate its toasts.
+fn custom_activator(app_id: &str) -> Option<GUID> {
+    let key: Vec<u16> = format!("AppUserModelId\\{app_id}\0")
+        .encode_utf16()
+        .collect();
+    let value: Vec<u16> = "CustomActivator\0".encode_utf16().collect();
+    let mut buffer = [0u16; 64];
+    let mut size = (buffer.len() * 2) as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CLASSES_ROOT,
+            PCWSTR(key.as_ptr()),
+            PCWSTR(value.as_ptr()),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut size),
+        )
+    };
+    if status.is_err() {
+        return None;
+    }
+    let length = buffer.iter().position(|ch| *ch == 0).unwrap_or(buffer.len());
+    let text = String::from_utf16_lossy(&buffer[..length]);
+    // The registry stores the CLSID braced ("{...}"); GUID::try_from wants the
+    // bare 36-character form.
+    GUID::try_from(text.trim().trim_start_matches('{').trim_end_matches('}')).ok()
+}
+
+/// Invokes an app's toast activator with the notification's launch argument,
+/// exactly as Windows does when the notification is clicked in the hub.
+fn com_activate(clsid: GUID, app_id: &str, launch: &str) -> bool {
+    let _ = ensure_winrt();
+    let aumid: Vec<u16> = app_id.encode_utf16().chain(std::iter::once(0)).collect();
+    let args: Vec<u16> = launch.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let Ok(callback) =
+            CoCreateInstance::<_, INotificationActivationCallback>(&clsid, None, CLSCTX_LOCAL_SERVER)
+        else {
+            return false;
+        };
+        callback
+            .Activate(PCWSTR(aumid.as_ptr()), PCWSTR(args.as_ptr()), &[])
+            .is_ok()
+    }
+}
+
+/// Initializes the COM/WinRT apartment for this thread if it is not already.
+fn ensure_winrt() {
+    let _ = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
 }
 
 fn publish(
