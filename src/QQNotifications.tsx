@@ -2,7 +2,6 @@ import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
@@ -205,11 +204,11 @@ export function useQQNotifications(canPreview: boolean) {
 
   const openNotification = useCallback((item: QQNotification) => {
     if (!isTauri()) return;
-    // Prefer the link in the notification (opens an existing browser tab);
-    // otherwise just bring the sending app's window to the front.
+    // Prefer the link in the notification (opens a tab in the existing browser
+    // window); otherwise just bring the sending app's window to the front.
     const url = urlFromNotification(`${item.title}\n${item.body}`);
     if (url) {
-      void openUrl(url).catch(() => {});
+      void invoke("open_notification_link", { appId: item.appId, url }).catch(() => {});
       return;
     }
     if (item.appId) void invoke("open_notification_app", { appId: item.appId }).catch(() => {});

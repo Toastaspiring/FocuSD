@@ -2,6 +2,8 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use std::{
     collections::HashMap,
+    path::{Path, PathBuf},
+    process::Command,
     sync::{mpsc, Arc, Mutex, OnceLock},
     thread,
     time::Duration,
@@ -283,6 +285,68 @@ pub fn open_notification_app(app: AppHandle, app_id: String) -> Result<(), Strin
     app.opener()
         .open_path(shortcut.to_string_lossy().to_string(), None::<&str>)
         .map_err(|error| format!("Could not open the app: {error}"))
+}
+
+/// Opens a link from a notification. For a Chromium browser the URL is opened
+/// in the already-running profile (a new tab in the existing window, no profile
+/// picker); anything else goes through the default handler.
+#[tauri::command]
+pub fn open_notification_link(app: AppHandle, app_id: String, url: String) -> Result<(), String> {
+    if !is_safe_http_url(&url) {
+        return Err("Unsupported link.".into());
+    }
+    if let Some(exe) = crate::app_icon_source::target_exe_for_aumid(&app_id) {
+        if let Some(family) = chromium_family(&exe) {
+            let mut command = Command::new(&exe);
+            if let Some(profile) = chromium_last_used_profile(family) {
+                command.arg(format!("--profile-directory={profile}"));
+            }
+            if command.arg(&url).spawn().is_ok() {
+                return Ok(());
+            }
+        }
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|error| format!("Could not open the link: {error}"))
+}
+
+fn is_safe_http_url(url: &str) -> bool {
+    (url.starts_with("http://") || url.starts_with("https://"))
+        && url.len() <= 2048
+        && !url.chars().any(char::is_whitespace)
+}
+
+/// The per-user data folder name for a Chromium browser executable, if known.
+fn chromium_family(exe: &Path) -> Option<&'static str> {
+    let name = exe.file_name()?.to_string_lossy().to_ascii_lowercase();
+    match name.as_str() {
+        "chrome.exe" => Some(r"Google\Chrome\User Data"),
+        "msedge.exe" => Some(r"Microsoft\Edge\User Data"),
+        "brave.exe" => Some(r"BraveSoftware\Brave-Browser\User Data"),
+        _ => None,
+    }
+}
+
+fn chromium_last_used_profile(user_data_suffix: &str) -> Option<String> {
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    let local_state = PathBuf::from(local)
+        .join(user_data_suffix)
+        .join("Local State");
+    let contents = std::fs::read_to_string(local_state).ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&contents).ok()?;
+    let profile = parsed
+        .get("profile")?
+        .get("last_used")?
+        .as_str()?
+        .to_string();
+    // Only accept a plain profile folder name, never a path or an argument.
+    (!profile.is_empty()
+        && !profile.starts_with('-')
+        && profile
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == ' ' || ch == '_' || ch == '-'))
+    .then_some(profile)
 }
 
 fn publish(
