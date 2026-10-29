@@ -2,6 +2,7 @@ import { useTranslation } from "./i18n";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { KeyRound, Power, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { MessageSourceIcon } from "./MessageSourceIcon";
 import { nextQQPreview, type QQPreviewTiming } from "./qqNotificationTiming";
@@ -9,6 +10,22 @@ import "./QQNotifications.css";
 
 const ENABLED_KEY = "focusd-island-qq-notifications-enabled";
 const ACCESS_REQUESTED_KEY = "focusd-island-qq-notification-access-requested";
+
+// Windows doesn't expose a toast's deep link, but browser notifications put the
+// site in their text (e.g. Chrome shows "www.instagram.com"). When we can find
+// one, opening it routes through the default browser, which lands on an existing
+// tab rather than a new window.
+function urlFromNotification(text: string): string | null {
+  const inline = text.match(/https?:\/\/[^\s<>"']+/i);
+  if (inline) return inline[0];
+  for (const line of text.split(/\r?\n/)) {
+    const candidate = line.trim();
+    if (/^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?$/i.test(candidate) && /\.[a-z]{2,}(?:\/|$)/i.test(candidate)) {
+      return `https://${candidate}`;
+    }
+  }
+  return null;
+}
 
 export type QQNotification = {
   id: string;
@@ -186,14 +203,20 @@ export function useQQNotifications(canPreview: boolean) {
     setPreviewWindow(null);
   }), [acceptSnapshot, run]);
 
-  const openApp = useCallback((appId: string) => {
-    if (!isTauri() || !appId) return;
-    // Best effort: launch the sending app; a missing launcher is a silent no-op.
-    void invoke("open_notification_app", { appId }).catch(() => {});
+  const openNotification = useCallback((item: QQNotification) => {
+    if (!isTauri()) return;
+    // Prefer the link in the notification (opens an existing browser tab);
+    // otherwise just bring the sending app's window to the front.
+    const url = urlFromNotification(`${item.title}\n${item.body}`);
+    if (url) {
+      void openUrl(url).catch(() => {});
+      return;
+    }
+    if (item.appId) void invoke("open_notification_app", { appId: item.appId }).catch(() => {});
   }, []);
 
   return {
-    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openApp,
+    snapshot, busy, actionError, setEnabled, requestAccess, openSettings, refresh, clear, openNotification,
     previewReceivedAt: canPreview ? previewWindow?.receivedAt ?? null : null,
     preview: canPreview && previewWindow
       ? snapshot.items.find((item) => item.id === previewWindow.id) ?? null
@@ -226,7 +249,7 @@ export function QQNotificationControls({ controller, compact = false }: { contro
 }
 
 export function QQNotificationPanel({ controller, navigation, appId }: { controller: QQNotificationsController; navigation: ReactNode; appId?: string }) {
-  const { snapshot, busy, actionError, refresh, clear, openApp } = controller;
+  const { snapshot, busy, actionError, refresh, clear, openNotification } = controller;
   const t = useTranslation();
   const error = actionError || snapshot.error || (snapshot.status === "permissionRequired" || snapshot.status === "permissionDenied" ? t.qq.status[snapshot.status] : null);
   const items = appId ? snapshot.items.filter((item) => item.appId === appId) : snapshot.items;
@@ -246,7 +269,7 @@ export function QQNotificationPanel({ controller, navigation, appId }: { control
           <div className="qq-panel__empty" role="status"><span className="message-empty-icon"><MessageSourceIcon source="qq" size={28} /></span><span>{t.common.noMessages}</span></div>
         ) : items.map((item) => (
           <article className="qq-panel__item qq-notification" key={item.id} role="listitem">
-            <button type="button" className="qq-notification__open" onClick={() => openApp(item.appId)} title={t.qq.openNotification(item.title)} aria-label={t.qq.openNotification(item.title)}>
+            <button type="button" className="qq-notification__open" onClick={() => openNotification(item)} title={t.qq.openNotification(item.title)} aria-label={t.qq.openNotification(item.title)}>
               <div className="qq-notification-item">
                 {!appId && item.app && <span className="qq-notification-item__app">{item.app}</span>}
                 <div className="qq-panel__item-heading"><strong>{item.title}</strong><time dateTime={new Date(item.createdAt).toISOString()}>{new Date(item.createdAt).toLocaleTimeString(t.localeTag, { hour: "2-digit", minute: "2-digit" })}</time></div>
